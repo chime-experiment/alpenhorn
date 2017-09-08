@@ -205,6 +205,8 @@ def status(all):
 
     import tabulate
 
+    di.connect_database()
+
     # Data to fetch from the database (node name, total files, total size)
     query_info = (di.StorageNode.name, pw.fn.Count(di.ArchiveFileCopy.id).alias('count'),
         pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size'), di.StorageNode.host, di.StorageNode.root
@@ -240,8 +242,9 @@ def status(all):
 def verify(node_name, md5, fixdb, acq):
     """Verify the archive on NODE against the database.
     """
-
     import os
+
+    di.connect_database()
 
     try:
         this_node = di.StorageNode.get(di.StorageNode.name == node_name)
@@ -496,6 +499,8 @@ def clean(node_name, days, force, now, target, acq):
 def mounted(host):
     """list the nodes mounted on this, or another specified, machine"""
     import socket
+
+    di.connect_database()
 
     if host is None:
         host = socket.gethostname().split(".")[0]
