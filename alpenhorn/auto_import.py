@@ -123,7 +123,7 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
     except pw.DoesNotExist:
         if allow_new_inst:
             di.ArchiveInst.insert(name=inst).execute()
-            logging.info("Added new acquisition instrument \"%s\" to DB." %
+            log.info("Added new acquisition instrument \"%s\" to DB." %
                          inst)
             inst_rec = di.ArchiveInst.get(di.ArchiveInst.name == inst)
         else:
@@ -136,7 +136,7 @@ def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
     except pw.DoesNotExist:
         if allow_new_atype:
             di.AcqType.insert(name=atype).execute()
-            logging.info("Added new acquisition type \"%s\" to DB." % atype)
+            log.info("Added new acquisition type \"%s\" to DB." % atype)
         else:
             log.warning("Acquisition type \"%s\" not in DB." % atype)
             return None
