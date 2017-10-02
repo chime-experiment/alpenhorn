@@ -581,7 +581,7 @@ def _import_file(node, root, acq_name, file_name):
                          (acq_name, file_name))
             except:
                 if not file.rawadcinfos.count():
-                    di.RawADCFileInfo.create(file=file)
+                    di.RawadcFileInfo.create(file=file)
                 log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
                             (acq_name, file_name))
 
