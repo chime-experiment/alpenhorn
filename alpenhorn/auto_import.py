@@ -266,6 +266,16 @@ def get_fileweatherinfo_keywords_from_h5(path):
             "date": d}
 
 
+def get_filerawadcinfo_keywords_from_h5(path):
+    with h5py.File(path, "r") as f:
+        times = f['timestamp']['ctime']
+        start_time = times.min()
+        finish_time = times.max()
+
+    return {"start_time": start_time,
+            "finish_time": finish_time}
+
+
 def get_filehkinfo_keywords_from_h5(path):
     f = h5py.File(path, "r")
     start_time = f["index_map/time"][0]
@@ -276,6 +286,21 @@ def get_filehkinfo_keywords_from_h5(path):
             "finish_time": finish_time,
             "atmel_name": atmel_name,
             "chunk_number": chunk_number}
+
+
+def get_filehkpinfo_keywords_from_h5(path):
+
+    def dset_timerange(dset):
+        # Get the span of times in a HKP dataset`
+        return dset['time'].min(), dset['time'].max()
+
+    # Get the time range of each dataset and then return the extremes
+    with h5py.File(path, "r") as f:
+        timerange = [dset_timerange(ds) for ds in f.values()]
+
+    start_times, finish_times = np.array(timerange).T
+    return {"start_time": start_times.min(),
+            "finish_time": finish_times.max()}
 
 
 def get_filerawinfo_keywords(rawinfo, size_b, file_name):
@@ -545,6 +570,34 @@ def _import_file(node, root, acq_name, file_name):
                 i.save()
                 log.info("Added information for file \"%s/%s\" to DB." %
                          (acq_name, file_name))
+
+    if ftype.name == "rawadc":
+        # Add if there is no rawadcinfo
+        if not file.rawadcinfos.count():
+            try:
+                di.RawadcFileInfo.create(file=file,
+                                         **get_filerawadcinfo_keywords_from_h5(fullpath))
+                log.info("Added information for file \"%s/%s\" to DB." %
+                         (acq_name, file_name))
+            except:
+                if not file.rawadcinfos.count():
+                    di.RawADCFileInfo.create(file=file)
+                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                            (acq_name, file_name))
+
+    if ftype.name == "hkp":
+        # Add if there is no hkpinfo
+        if not file.hkpinfos.count():
+            try:
+                di.HKPFileInfo.create(file=file,
+                                      **get_filehkpinfo_keywords_from_h5(fullpath))
+                log.info("Added information for file \"%s/%s\" to DB." %
+                         (acq_name, file_name))
+            except:
+                if not file.hkpinfos.count():
+                    di.HKPFileInfo.create(file=file)
+                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                            (acq_name, file_name))
 
     if import_done is not None:
         bisect.insort_left(import_done, fullpath)
