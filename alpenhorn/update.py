@@ -641,6 +641,11 @@ def update_node_hpss_outbound(node):
 
     log.info('Processing HPSS outbound transfers (%s)' % node.name)
 
+    # Skip if node is too full
+    if node.avail_gb < (node.min_avail_gb + 10):
+        log.info("Node %s is nearly full. Skipping HPSS outbound transfers." % node.name)
+        return
+
     # Fetch requests for transfer onto this node
     requests = di.ArchiveFileCopyRequest.select().where(
         ~di.ArchiveFileCopyRequest.completed,
