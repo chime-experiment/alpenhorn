@@ -3,7 +3,7 @@
 Alpenhorn is a daemon and client for managing CHIME archive data.
 
 ## (Re-)Installing on `tubular` and `jingle`
-After making changes to alpenhon, a CHIME administrator will have to
+After making changes to alpenhorn, a CHIME administrator will have to
 re-install this package on the production servers using
 [ch\_ansible](https://bitbucket.org/chime/ch_ansible).  To re-install
 only the alpenhorn-specific hosts, you can run:
