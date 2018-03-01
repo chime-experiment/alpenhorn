@@ -533,6 +533,9 @@ def format_transport(serial_num):
         print "You must be root to run mount on a transport disc. I quit."
         return
 
+    # Make sure we connect RW
+    di.connect_database(read_write=True)
+
     # Find the disc.
     dev = glob.glob("/dev/disk/by-id/*%s" % serial_num)
     if len(dev) == 0:
