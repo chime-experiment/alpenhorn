@@ -1,6 +1,7 @@
 """Alpenhorn client interface."""
 
 import sys
+import time
 import os
 import datetime
 
@@ -571,6 +572,7 @@ def format_transport(serial_num):
         print "Creating partition. Please wait."
         os.system("parted -s -a optimal %s mklabel gpt -- mkpart primary 0%% 100%%" % dev)
         print "Formatting disc. Please wait."
+        time.sleep(5)  # Sleep for a few seconds to allow the partition to appear
         os.system("mkfs.ext4 %s -m 0 -L CH-%s" % (dev_part, serial_num))
     else:
         print "Disc is already formatted."
@@ -645,7 +647,10 @@ def mount_transport(ctx, node, user, address):
     mnt_point = "/mnt/%s" % node
 
     print "Mounting disc at %s" % mnt_point
-    os.system("mount %s" % mnt_point)
+
+    if os.system("mount %s" % mnt_point) != 0:
+        print "Could not mount disk in OS."
+        return
 
     ctx.invoke(mount, name=node, path=mnt_point, user=user, address=address)
 
