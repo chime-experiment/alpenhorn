@@ -381,7 +381,10 @@ def update_node_requests(node):
                        (RSYNC_FLAG, from_path, to_path))
                 ret, stdout, stderr = run_command(cmd.split())
 
-                md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name)) if ret == 0 else None
+                # rsync v3+ already does a whole-file MD5 sum while
+                # transferring and guarantees the written file has the same
+                # MD5 sum as the source file, so we can skip the check here.
+                md5sum = req.file.md5sum if ret == 0 else None
 
             # If we get here then we have no idea how to transfer the file...
             else:
@@ -415,7 +418,10 @@ def update_node_requests(node):
                     cmd = "rsync -%s %s %s" % (RSYNC_FLAG, from_path, to_path)
                     ret, stdout, stderr = run_command(cmd.split())
 
-                    md5sum = di.md5sum_file("%s/%s" % (to_path, req.file.name)) if ret == 0 else None
+                    # rsync v3+ already does a whole-file MD5 sum while
+                    # transferring and guarantees the written file has the same
+                    # MD5 sum as the source file, so we can skip the check here.
+                    md5sum = req.file.md5sum if ret == 0 else None
                 else:
                     log.warn("No commands available to complete this transfer.")
                     ret = -1
