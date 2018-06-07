@@ -476,8 +476,9 @@ def update_node_requests(node):
                 # This node is getting the transport king.
                 done_transport_this_cycle = True
 
-            # Update local estimate of available space
-            avail_gb = avail_gb - req.file.size_b / 2**30.0
+            # Update node available space
+            update_node_free_space(node)
+            avail_gb = node.avail_gb
 
         else:
             log.error("Error with md5sum check: %s on node \"%s\", but %s on "
