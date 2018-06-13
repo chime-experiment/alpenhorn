@@ -129,17 +129,17 @@ def update_node_free_space(node):
 
     # Check with the OS how much free space there is
     x = os.statvfs(node.root)
-    avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
+    node.avail_gb = float(x.f_bavail) * x.f_bsize / 2**30.0
 
     # Update the DB with the free space. Perform with an update query (rather
     # than save) to ensure we don't clobber changes made manually to the
     # database
     di.StorageNode.update(
-        avail_gb=avail_gb,
+        avail_gb=node.avail_gb,
         avail_gb_last_checked=datetime.datetime.now()
     ).where(di.StorageNode.id == node.id).execute()
 
-    log.info("Node \"%s\" has %.2f GB available." % (node.name, avail_gb))
+    log.info("Node \"%s\" has %.2f GB available." % (node.name, node.avail_gb))
 
 
 def update_node_integrity(node):
@@ -249,10 +249,8 @@ def update_node_requests(node):
         log.error("Cannot process HPSS node here.")
         return
 
-    avail_gb = node.avail_gb
-
     # Skip if node is too full
-    if avail_gb < (node.min_avail_gb + 10):
+    if node.avail_gb < (node.min_avail_gb + 10):
         log.info("Node %s is nearly full. Skip transfers." % node.name)
         return
 
@@ -478,7 +476,6 @@ def update_node_requests(node):
 
             # Update node available space
             update_node_free_space(node)
-            avail_gb = node.avail_gb
 
         else:
             log.error("Error with md5sum check: %s on node \"%s\", but %s on "
