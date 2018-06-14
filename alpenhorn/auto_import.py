@@ -78,7 +78,7 @@ def setup_observers(node_list):
             if node.host == node.name:
                 obs_list.append(Observer())
             else:
-                obs_list.append(PollingObserver(timeout=30))
+                obs_list.append(PollingObserver(timeout=120))
             obs_list[-1].schedule(RegisterFile(node), node.root, recursive=True)
         else:
             obs_list.append(None)
