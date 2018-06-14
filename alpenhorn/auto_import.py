@@ -625,6 +625,13 @@ class RegisterFile(FileSystemEventHandler):
             import_file(self.node, self.root, subpath[0], subpath[1])
         return
 
+    def on_created(self, event):
+        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
+        subpath = event.src_path.replace(self.root + "/", "").split("/")
+        if len(subpath) == 2:
+            import_file(self.node, self.root, subpath[0], subpath[1])
+        return
+
     def on_moved(self, event):
         # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
         subpath = event.dest_path.replace(self.root + "/", "").split("/")
