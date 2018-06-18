@@ -78,7 +78,7 @@ def setup_observers(node_list):
             if node.host == node.name:
                 obs_list.append(Observer())
             else:
-                obs_list.append(PollingObserver(timeout=30))
+                obs_list.append(PollingObserver(timeout=120))
             obs_list[-1].schedule(RegisterFile(node), node.root, recursive=True)
         else:
             obs_list.append(None)
@@ -619,6 +619,13 @@ class RegisterFile(FileSystemEventHandler):
         super(RegisterFile, self).__init__()
 
     def on_modified(self, event):
+        # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
+        subpath = event.src_path.replace(self.root + "/", "").split("/")
+        if len(subpath) == 2:
+            import_file(self.node, self.root, subpath[0], subpath[1])
+        return
+
+    def on_created(self, event):
         # Figure out the parts; it should be ROOT/ACQ_NAME/FILE_NAME
         subpath = event.src_path.replace(self.root + "/", "").split("/")
         if len(subpath) == 2:
