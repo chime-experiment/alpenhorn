@@ -348,14 +348,15 @@ def verify(node_name, md5, fixdb, acq):
 @cli.command()
 @click.argument('node_name', metavar='NODE')
 @click.option('--days', '-d', help='clean files older than <days>', type=int, default=None)
+@click.option('--size', '-s', help='clean the earliest registered <size> GiB of files', type=int, default=None)
 @click.option('--force', '-f', help='force cleaning on an archive node', is_flag=True)
 @click.option('--now', '-n', help='force immediate removal', is_flag=True)
 @click.option('--target', metavar='TARGET_GROUP', default=None, type=str,
               help='Only clean files already available in this group.')
 @click.option('--acq', metavar='ACQ', default=None, type=str,
               help='Limit removal to acquisition')
-def clean(node_name, days, force, now, target, acq):
-    """Clean up NODE by marking older files as potentially removable.
+def clean(node_name, days, size, force, now, target, acq):
+    """Clean up NODE by marking files as potentially removable.
 
     If --target is specified we will only remove files already available in the
     TARGET_GROUP. This is useful for cleaning out intermediate locations such as
@@ -365,10 +366,28 @@ def clean(node_name, days, force, now, target, acq):
     files which have a timestamp associated with them. It will not
     touch other types. If no --days flag is given, all files will be
     considered for removal.
+
+    The size specified with --size is always rounded up depending on the size
+    of the files marked for removal.  Files in this mode are ordered by
+    registration time (i.e. database order), not by acquisition time, and so
+    it will mark all files, not just those with a timestamp.  If more than
+    <size> GiB of files are already marked for removal, no new files will be
+    marked.
+
+    The --size and --days flags are mutually exclusive.
     """
 
     import peewee as pw
     di.connect_database(read_write=True)
+
+    # Check for clashing arguments
+    if days is not None and size is not None:
+        raise ValueError("Parameter error: you cannot specify both --days and --size")
+
+    # Ignore weird values
+    if size is not None and size <= 0:
+        print "Nothing selected for cleaning."
+        return
 
     try:
         this_node = di.StorageNode.get(di.StorageNode.name == node_name)
@@ -384,10 +403,19 @@ def clean(node_name, days, force, now, target, acq):
             return
 
     # Select FileCopys on this node.
-    files = di.ArchiveFileCopy.select(di.ArchiveFileCopy.id).where(
-        di.ArchiveFileCopy.node == this_node,
-        di.ArchiveFileCopy.wants_file == 'Y'
-    )
+
+    files = di.ArchiveFileCopy \
+            .select(di.ArchiveFileCopy.id, di.ArchiveFileCopy.wants_file,
+                    di.ArchiveFile.size_b).join(di.ArchiveFile) \
+            .where(di.ArchiveFileCopy.node == this_node)
+
+    # If size is specified, we select files that are currently on the node,
+    # and ignore wants_file.  Otherwise, we select all files destined for
+    # this node (wants_file == 'Y'), whether or not they're already on it
+    if size is None:
+        files = files.where(di.ArchiveFileCopy.wants_file == 'Y')
+    else:
+        files = files.where(di.ArchiveFileCopy.has_file == 'Y')
 
     # Limit to acquisition
     if acq is not None:
@@ -441,7 +469,7 @@ def clean(node_name, days, force, now, target, acq):
         for name, infotable in filetypes:
 
             # Filter to fetch only ones with a start time older than `oldest`
-            oldfiles = files.join(di.ArchiveFile).join(infotable)\
+            oldfiles = files.join(infotable) \
                 .where(infotable.start_time < oldest_unix)
 
             local_file_ids = list(oldfiles)
@@ -459,7 +487,39 @@ def clean(node_name, days, force, now, target, acq):
 
                 file_ids += local_file_ids
 
-    # If days is not set, then just select all files that meet the requirements so far
+    # If size is set, iterate through files until we've satisfied the size given
+    elif size is not None:
+
+        # Convert to bytes
+        size *= 2**30
+
+        # Iterate though the file list until we've found enough files
+        marked_size = 0
+        count = 0
+        file_ids = list()
+        for copy in files:
+            # Add the file to the list to be marked only if necessary.
+            # We can escallate wants_file = 'M' to 'N' here
+            if copy.wants_file == 'Y' or (now and copy.wants_file == 'M'):
+                file_ids.append(copy)
+                marked_size += copy.file.size_b
+                count += 1
+
+            # Check if we're done.  The size subtracton happens even if
+            # the file wasn't added to the list
+            size -= copy.file.size_b
+            if size <= 0:
+                break
+
+        if count > 0:
+            print 'Cleaning up %i files (%.1f GB) from %s ' % (count,
+                    marked_size / 2**30, node_name)
+        else:
+            print 'Size parameter already satisfied.  No new files marked for cleaning.'
+            return
+
+    # If neither days nor size is not set, then just select all files that
+    # meet the requirements so far
     else:
 
         file_ids = list(files)
