@@ -497,17 +497,17 @@ def clean(node_name, days, size, force, now, target, acq):
         marked_size = 0
         count = 0
         file_ids = list()
-        for copy in files.naive():
+        for copy in files:
             # Add the file to the list to be marked only if necessary.
             # We can escallate wants_file = 'M' to 'N' here
             if copy.wants_file == 'Y' or (now and copy.wants_file == 'M'):
                 file_ids.append(copy)
-                marked_size += copy.size_b
+                marked_size += copy.file.size_b
                 count += 1
 
             # Check if we're done.  The size subtracton happens even if
             # the file wasn't added to the list
-            size -= copy.size_b
+            size -= copy.file.size_b
             if size <= 0:
                 break
 
