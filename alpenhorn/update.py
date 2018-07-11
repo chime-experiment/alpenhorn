@@ -19,7 +19,7 @@ log = logger.get_log()
 max_time_per_node_operation = 300   # Don't let node operations hog time.
 min_loop_time = 60    # Main loop at most every 60 seconds.
 
-RSYNC_FLAG = "qtspgoDL"
+RSYNC_FLAG = "qtspgoDLS"
 
 # Globals.
 done_transport_this_cycle = False
@@ -372,8 +372,7 @@ def update_node_requests(node):
                 else:
                     md5sum = None
 
-            # Next try rsync over ssh. We need to explicitly calculate the md5
-            # hash after the fact
+            # Next try rsync over ssh.
             elif command_available('rsync'):
                 cmd = ("rsync -z%s --rsync-path=\"ionice -c4 -n4 rsync\" -e \"ssh -q\" %s %s" %
                        (RSYNC_FLAG, from_path, to_path))
