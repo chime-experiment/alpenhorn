@@ -19,8 +19,8 @@ log = logger.get_log()
 max_time_per_node_operation = 300   # Don't let node operations hog time.
 min_loop_time = 60    # Main loop at most every 60 seconds.
 
-RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner --devices " \
-        + "--specials --copy-links --sparse"
+RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner " \
+        + "--copy-links --sparse"
 
 # Globals.
 done_transport_this_cycle = False
