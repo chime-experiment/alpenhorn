@@ -5,6 +5,7 @@ import time
 import datetime
 import re
 import socket
+import glob
 
 import peewee as pw
 from peewee import fn
@@ -24,6 +25,12 @@ RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner " \
 
 # Globals.
 done_transport_this_cycle = False
+
+# The path used for filesystem-based HPSS callbacks
+hpss_callback_path = "/scratch/k/krs/jrs65/chime/logs/hpss_callbacks/"  # default path
+
+if 'ALPENHORN_HPSS_CB_PATH' in os.environ:
+    hpss_callback_path = os.environ['ALPENHORN_HPSS_CB_PATH']
 
 
 def run_command(cmd, **kwargs):
@@ -599,6 +606,33 @@ def _check_and_bundle_requests(requests, node):
 
     return requests_to_process
 
+def run_hpss_callbacks_from_file(node):
+    """Execute filesystem-based HPSS callbacks
+    """
+
+    log.info('Processing HPSS callbacks (%s)' % node.name)
+
+    # Compile the regex
+    prog = re.compile(".+/hpss-[^-]+-((?:push|pull)_(?:success|failed))-([0-9]+)-([0-9]+).callback$");
+
+    # Iterate over callback files in order
+    for cb in sorted(glob.glob(os.path.join(hpss_callback_path, "hpss-*-*-*-*.callback"))):
+        # The files are zero size.  All the information is in the filename
+        # itself
+
+        # Decompose the filename
+        match = prog.match(cb)
+
+        # Execute the callback, if decomposition worked
+        if match:
+            os.system("alpenhorn_hpss {0} {1} {2}".format(match.group(1),
+                match.group(2), match.group(3)))
+        else:
+            log.error("Incomprehensible callback: {0}".format(cb))
+
+        # Remove callback
+        unlink(cb)
+
 
 def update_node_hpss_inbound(node):
     """Process transfers into an HPSS node.
@@ -606,6 +640,9 @@ def update_node_hpss_inbound(node):
 
     if not is_hpss_node(node):
         log.error('This is not an HPSS node.')
+
+    # Deal with the HPSS callback hack
+    run_hpss_callbacks_from_file()
 
     log.info('Processing HPSS inbound transfers (%s)' % node.name)
 
@@ -727,7 +764,8 @@ then
     hsi -q mv $DESTDIR/%(acq)s/tmp.%(file)s $DESTDIR/%(acq)s/%(file)s
 
     # Signal success
-    ssh %(host)s 'alpenhorn_hpss push_success %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss push_success %(file_id)i %(node_id)i'
+    touch %(cb_path)/hpss-%(dtstring)-push_success-%(file_id)i-%(node_id)i.callback
 
     echo 'Finished push.'
 else
@@ -735,7 +773,8 @@ else
     hsi -q rm $DESTDIR/%(acq)s/tmp.%(file)s
 
     # Signal failure
-    ssh %(host)s 'alpenhorn_hpss push_failed %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss push_failed %(file_id)i %(node_id)i'
+    touch %(cb_path)/hpss-%(dtstring)-push_failed-%(file_id)i-%(node_id)i.callback
 
     echo "Push failed."
 fi
@@ -758,7 +797,9 @@ fi
             'file_hash': req.file.md5sum,
             'host': socket.gethostname(),
             'file_id': req.file.id,
-            'node_id': node.id
+            'node_id': node.id,
+            'cb_path': hpss_callback_path,
+            'dtstring': dtstring
         }
 
         script += loop % req_dict
