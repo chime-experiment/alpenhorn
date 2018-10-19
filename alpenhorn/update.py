@@ -445,27 +445,29 @@ def update_node_requests(node):
                      "seconds [%.1f MB/s]" % (size_mb, int(trans_time), rate))
 
             # Update the FileCopy (if exists), or insert a new FileCopy
-            try:
-                done = False
-                while not done:
-                    try:
-                        fcopy = di.ArchiveFileCopy\
-                                  .select()\
-                                  .where(di.ArchiveFileCopy.file == req.file,
-                                         di.ArchiveFileCopy.node == node)\
-                                  .get()
-                        fcopy.has_file = 'Y'
-                        fcopy.wants_file = 'Y'
-                        fcopy.save()
-                        done = True
-                    except pw.OperationalError:
-                        log.error("MySQL connexion dropped. Will attempt to reconnect in "
-                                  "five seconds.")
-                        time.sleep(5)
-                        di.connect_database(True)
-            except pw.DoesNotExist:
-                di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
-                                          wants_file='Y').execute()
+            # Use transaction to avoid race condition
+            with di.database_proxy.transaction():
+                try:
+                    done = False
+                    while not done:
+                        try:
+                            fcopy = di.ArchiveFileCopy\
+                                      .select()\
+                                      .where(di.ArchiveFileCopy.file == req.file,
+                                             di.ArchiveFileCopy.node == node)\
+                                      .get()
+                            fcopy.has_file = 'Y'
+                            fcopy.wants_file = 'Y'
+                            fcopy.save()
+                            done = True
+                        except pw.OperationalError:
+                            log.error("MySQL connexion dropped. Will attempt to reconnect in "
+                                      "five seconds.")
+                            time.sleep(5)
+                            di.connect_database(True)
+                except pw.DoesNotExist:
+                    di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
+                                              wants_file='Y').execute()
 
             # Mark any FileCopyRequest for this file as completed
             di.ArchiveFileCopyRequest.update(completed=True).where(
