@@ -84,6 +84,28 @@ def pbs_jobs():
 
     return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
 
+def slurm_jobs():
+    """Fetch the jobs in the PBS queue on this host.
+
+    Returns
+    -------
+    jobs : dict
+    """
+
+    import getpass
+    user = getpass.getuser()
+
+    ret, out, err = run_command(('squeue -o %%all -u %s' % user).split())
+    lines = out.split('\n')
+    headers = lines[0].split('|')
+
+    jobs = []
+
+    for line in lines[1:-1]:
+        job = dict(zip(headers, line.split('|')))
+        jobs.append(job)
+
+    return jobs
 
 def queued_archive_jobs():
     """Fetch the info about jobs waiting in the archive queue.
@@ -93,9 +115,10 @@ def queued_archive_jobs():
     jobs: dict
     """
 
-    jobs = pbs_jobs()
+    jobs = slurm_jobs()
 
-    return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+    #return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+    return [ job for job in jobs if (job['ST'] == 'PD' and job['PARTITION'] == 'archivelong')]
 
 
 def is_md5_hash(h):
@@ -728,11 +751,9 @@ def update_node_hpss_outbound(node):
 def _create_hpss_push_script(requests, node):
 
     start = """#!/bin/bash
-#PBS -l walltime=4:00:00
-#PBS -q archive
-#PBS -N push_%(jobname)s
-#PBS -j oe
-#PBS -m e
+#SBATCH -t 4:00:00
+#SBATCH -q archivelong
+#SBATCH -J pull_%(jobname)s
 
 # Transfer files from CHIME archive to HPSS
 
@@ -817,11 +838,9 @@ fi
 def _create_hpss_pull_script(requests, node):
 
     start = """#!/bin/bash
-#PBS -l walltime=4:00:00
-#PBS -q archive
-#PBS -N pull_%(jobname)s
-#PBS -j oe
-#PBS -m e
+#SBATCH -t 4:00:00
+#SBATCH -q archivelong
+#SBATCH -J pull_%(jobname)s
 
 # Transfer files from HPSS into online archive
 
@@ -900,4 +919,4 @@ fi
 
 
 def _submit_hpss_script(script):
-    os.system('ssh gpc04 "cd %s; qsub %s"' % os.path.split(script))
+    os.system('ssh nia-login07 "cd %s; sbatch %s"' % os.path.split(script))
