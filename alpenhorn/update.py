@@ -665,7 +665,7 @@ def update_node_hpss_inbound(node):
         log.error('This is not an HPSS node.')
 
     # Deal with the HPSS callback hack
-    run_hpss_callbacks_from_file()
+    run_hpss_callbacks_from_file(node)
 
     log.info('Processing HPSS inbound transfers (%s)' % node.name)
 
@@ -704,6 +704,9 @@ def update_node_hpss_inbound(node):
 def update_node_hpss_outbound(node):
     """Process transfers out of an HPSS tape node.
     """
+
+    # Deal with the HPSS callback hack
+    run_hpss_callbacks_from_file(node)
 
     log.info('Processing HPSS outbound transfers (%s)' % node.name)
 
@@ -874,7 +877,8 @@ then
     mv $DESTDIR/%(acq)s/tmp.%(file)s $DESTDIR/%(acq)s/%(file)s
 
     # Signal success
-    ssh %(host)s 'alpenhorn_hpss pull_success %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss pull_success %(file_id)i %(node_id)i'
+    touch %(cb_path)/hpss-%(dtstring)-pull_success-%(file_id)i-%(node_id)i.callback
 
     echo 'Finished pull.'
 else
@@ -882,7 +886,8 @@ else
     rm $DESTDIR/%(acq)s/tmp.%(file)s
 
     # Signal failure
-    ssh %(host)s 'alpenhorn_hpss pull_failed %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss pull_failed %(file_id)i %(node_id)i'
+    touch %(cb_path)/hpss-%(dtstring)-pull_failed-%(file_id)i-%(node_id)i.callback
 
     echo "Pull failed."
 fi
@@ -903,7 +908,9 @@ fi
             'file_hash': req.file.md5sum,
             'host': socket.gethostname(),
             'file_id': req.file.id,
-            'node_id': node.id
+            'node_id': node.id,
+            'cb_path': hpss_callback_path,
+            'dtstring': dtstring
         }
 
         script += loop % req_dict
