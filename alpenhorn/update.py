@@ -27,7 +27,7 @@ RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner " \
 done_transport_this_cycle = False
 
 # The path used for filesystem-based HPSS callbacks
-hpss_callback_path = "/scratch/k/krs/jrs65/chime/logs/hpss_callbacks/"  # default path
+hpss_callback_path = "/scratch/k/krs/jrs65/chime/scripts/"  # default path
 
 if 'ALPENHORN_HPSS_CB_PATH' in os.environ:
     hpss_callback_path = os.environ['ALPENHORN_HPSS_CB_PATH']
