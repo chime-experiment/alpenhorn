@@ -26,12 +26,11 @@ RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner " \
 # Globals.
 done_transport_this_cycle = False
 
-# The path used for filesystem-based HPSS callbacks
-hpss_callback_path = "/scratch/k/krs/jrs65/chime/scripts/"  # default path
-
-if 'ALPENHORN_HPSS_CB_PATH' in os.environ:
-    hpss_callback_path = os.environ['ALPENHORN_HPSS_CB_PATH']
-
+# The path used for HPSS scripts and callbacks
+if 'ALPENHORN_HPSS_SCRIPT_DIR' in os.environ:
+    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
+else:
+    HPSS_SCRIPT_DIR = None
 
 def run_command(cmd, **kwargs):
     """Run a command.
@@ -639,7 +638,8 @@ def run_hpss_callbacks_from_file(node):
     prog = re.compile(".+/hpss-[^-]+-((?:push|pull)_(?:success|failed))-([0-9]+)-([0-9]+).callback$");
 
     # Iterate over callback files in order
-    for cb in sorted(glob.glob(os.path.join(hpss_callback_path, "hpss-*-*-*-*.callback"))):
+    for cb in sorted(glob.glob(os.path.join(HPSS_SCRIPT_DIR, \
+				    "hpss-*-*-*-*.callback"))):
         # The files are zero size.  All the information is in the filename
         # itself
 
@@ -660,6 +660,9 @@ def run_hpss_callbacks_from_file(node):
 def update_node_hpss_inbound(node):
     """Process transfers into an HPSS node.
     """
+
+    if HPSS_SCRIPT_DIR is None:
+        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
 
     if not is_hpss_node(node):
         log.error('This is not an HPSS node.')
@@ -704,6 +707,9 @@ def update_node_hpss_inbound(node):
 def update_node_hpss_outbound(node):
     """Process transfers out of an HPSS tape node.
     """
+
+    if HPSS_SCRIPT_DIR is None:
+        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
 
     # Deal with the HPSS callback hack
     run_hpss_callbacks_from_file(node)
@@ -789,7 +795,7 @@ then
 
     # Signal success
     #ssh %(host)s 'alpenhorn_hpss push_success %(file_id)i %(node_id)i'
-    touch %(cb_path)/hpss-%(dtstring)-push_success-%(file_id)i-%(node_id)i.callback
+    touch %(cb_path)s/hpss-%(dtstring)s-push_success-%(file_id)i-%(node_id)i.callback
 
     echo 'Finished push.'
 else
@@ -798,7 +804,7 @@ else
 
     # Signal failure
     #ssh %(host)s 'alpenhorn_hpss push_failed %(file_id)i %(node_id)i'
-    touch %(cb_path)/hpss-%(dtstring)-push_failed-%(file_id)i-%(node_id)i.callback
+    touch %(cb_path)s/hpss-%(dtstring)s-push_failed-%(file_id)i-%(node_id)i.callback
 
     echo "Push failed."
 fi
@@ -808,8 +814,6 @@ fi
     dtstring = dtnow.strftime('%Y%m%dT%H%M%S')
 
     script = start % {'offline_node_root': node.root, 'jobname': dtstring}
-
-
 
     # Loop over files to construct push script
     for req in requests:
@@ -822,13 +826,11 @@ fi
             'host': socket.gethostname(),
             'file_id': req.file.id,
             'node_id': node.id,
-            'cb_path': hpss_callback_path,
+            'cb_path': HPSS_SCRIPT_DIR,
             'dtstring': dtstring
         }
 
         script += loop % req_dict
-
-    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
 
     script_name = HPSS_SCRIPT_DIR + '/push_%s.sh' % dtstring
 
@@ -878,7 +880,7 @@ then
 
     # Signal success
     #ssh %(host)s 'alpenhorn_hpss pull_success %(file_id)i %(node_id)i'
-    touch %(cb_path)/hpss-%(dtstring)-pull_success-%(file_id)i-%(node_id)i.callback
+    touch %(cb_path)s/hpss-%(dtstring)s-pull_success-%(file_id)i-%(node_id)i.callback
 
     echo 'Finished pull.'
 else
@@ -887,7 +889,7 @@ else
 
     # Signal failure
     #ssh %(host)s 'alpenhorn_hpss pull_failed %(file_id)i %(node_id)i'
-    touch %(cb_path)/hpss-%(dtstring)-pull_failed-%(file_id)i-%(node_id)i.callback
+    touch %(cb_path)s/hpss-%(dtstring)s-pull_failed-%(file_id)i-%(node_id)i.callback
 
     echo "Pull failed."
 fi
@@ -909,13 +911,11 @@ fi
             'host': socket.gethostname(),
             'file_id': req.file.id,
             'node_id': node.id,
-            'cb_path': hpss_callback_path,
+            'cb_path': HPSS_SCRIPT_DIR,
             'dtstring': dtstring
         }
 
         script += loop % req_dict
-
-    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
 
     script_name = HPSS_SCRIPT_DIR + '/pull_%s.sh' % dtstring
 
