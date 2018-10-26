@@ -84,7 +84,7 @@ def pbs_jobs():
     return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
 
 def slurm_jobs():
-    """Fetch the jobs in the PBS queue on this host.
+    """Fetch the jobs in the slurm queue on this host.
 
     Returns
     -------
@@ -761,8 +761,9 @@ def _create_hpss_push_script(requests, node):
 
     start = """#!/bin/bash
 #SBATCH -t 4:00:00
-#SBATCH -q archivelong
+#SBATCH -p archivelong
 #SBATCH -J pull_%(jobname)s
+#SBATCH -N 1
 
 # Transfer files from CHIME archive to HPSS
 
@@ -844,8 +845,9 @@ def _create_hpss_pull_script(requests, node):
 
     start = """#!/bin/bash
 #SBATCH -t 4:00:00
-#SBATCH -q archivelong
+#SBATCH -p archivelong
 #SBATCH -J pull_%(jobname)s
+#SBATCH -N 1
 
 # Transfer files from HPSS into online archive
 
