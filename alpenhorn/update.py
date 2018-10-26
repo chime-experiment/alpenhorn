@@ -654,7 +654,7 @@ def run_hpss_callbacks_from_file(node):
             log.error("Incomprehensible callback: {0}".format(cb))
 
         # Remove callback
-        unlink(cb)
+        os.unlink(cb)
 
 
 def update_node_hpss_inbound(node):
