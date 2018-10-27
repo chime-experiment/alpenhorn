@@ -141,8 +141,8 @@ def update_loop(host):
         loop_start = time.time()
         done_transport_this_cycle = False
 
-	# Deal with the HPSS callback hack
-	run_hpss_callbacks_from_file()
+        # Deal with the HPSS callback hack
+        run_hpss_callbacks_from_file()
 
         # Iterate over nodes and perform each update (perform a new query
         # each time in case we get a new node, e.g. transport disk)
@@ -637,7 +637,7 @@ def run_hpss_callbacks_from_file():
 
     # Do nothing if the HPSS script directory hasn't been defined
     if HPSS_SCRIPT_DIR is None:
-	return
+        return
 
     log.info('Processing HPSS callbacks')
 
@@ -646,7 +646,7 @@ def run_hpss_callbacks_from_file():
 
     # Iterate over callback files in order
     for cb in sorted(glob.glob(os.path.join(HPSS_SCRIPT_DIR, \
-				    "hpss-*-*-*-*.callback"))):
+                    "hpss-*-*-*-*.callback"))):
         # The files are zero size.  All the information is in the filename
         # itself
 
@@ -675,7 +675,7 @@ def update_node_hpss_inbound(node):
 
     if not is_hpss_node(node):
         log.error('This is not an HPSS node.')
-	return
+        return
 
     # Fetch requests for transfer onto this node
     requests = di.ArchiveFileCopyRequest.select().where(
@@ -712,7 +712,6 @@ def update_node_hpss_inbound(node):
 def update_node_hpss_outbound(node):
     """Process transfers out of an HPSS tape node.
     """
-
 
     log.info('Processing HPSS outbound transfers (%s)' % node.name)
 
