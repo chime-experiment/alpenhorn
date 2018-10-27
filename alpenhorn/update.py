@@ -141,6 +141,9 @@ def update_loop(host):
         loop_start = time.time()
         done_transport_this_cycle = False
 
+	# Deal with the HPSS callback hack
+	run_hpss_callbacks_from_file()
+
         # Iterate over nodes and perform each update (perform a new query
         # each time in case we get a new node, e.g. transport disk)
         for node in di.StorageNode.select().where(di.StorageNode.host == host):
@@ -628,11 +631,15 @@ def _check_and_bundle_requests(requests, node):
 
     return requests_to_process
 
-def run_hpss_callbacks_from_file(node):
+def run_hpss_callbacks_from_file():
     """Execute filesystem-based HPSS callbacks
     """
 
-    log.info('Processing HPSS callbacks (%s)' % node.name)
+    # Do nothing if the HPSS script directory hasn't been defined
+    if HPSS_SCRIPT_DIR is None:
+	return
+
+    log.info('Processing HPSS callbacks')
 
     # Compile the regex
     prog = re.compile(".+/hpss-[^-]+-((?:push|pull)_(?:success|failed))-([0-9]+)-([0-9]+).callback$");
@@ -664,13 +671,11 @@ def update_node_hpss_inbound(node):
     if HPSS_SCRIPT_DIR is None:
         raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
 
+    log.info('Processing HPSS inbound transfers (%s)' % node.name)
+
     if not is_hpss_node(node):
         log.error('This is not an HPSS node.')
-
-    # Deal with the HPSS callback hack
-    run_hpss_callbacks_from_file(node)
-
-    log.info('Processing HPSS inbound transfers (%s)' % node.name)
+	return
 
     # Fetch requests for transfer onto this node
     requests = di.ArchiveFileCopyRequest.select().where(
@@ -708,11 +713,6 @@ def update_node_hpss_outbound(node):
     """Process transfers out of an HPSS tape node.
     """
 
-    if HPSS_SCRIPT_DIR is None:
-        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
-
-    # Deal with the HPSS callback hack
-    run_hpss_callbacks_from_file(node)
 
     log.info('Processing HPSS outbound transfers (%s)' % node.name)
 
@@ -751,6 +751,9 @@ def update_node_hpss_outbound(node):
         di.ArchiveFileCopyRequest.update(completed=True).where(
             di.ArchiveFileCopyRequest.file == req.file).where(
             di.ArchiveFileCopyRequest.group_to == node.group).execute()
+
+    if HPSS_SCRIPT_DIR is None:
+        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
 
     script_name = _create_hpss_pull_script(requests_to_process, node)
     log.info('Submitting HPSS job %s' % script_name)
