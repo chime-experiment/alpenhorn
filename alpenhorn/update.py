@@ -713,6 +713,10 @@ def update_node_hpss_outbound(node):
     """Process transfers out of an HPSS tape node.
     """
 
+    # Do nothing if the HPSS script directory hasn't been defined
+    if HPSS_SCRIPT_DIR is None:
+        return
+
     log.info('Processing HPSS outbound transfers (%s)' % node.name)
 
     # Skip if node is too full
@@ -750,9 +754,6 @@ def update_node_hpss_outbound(node):
         di.ArchiveFileCopyRequest.update(completed=True).where(
             di.ArchiveFileCopyRequest.file == req.file).where(
             di.ArchiveFileCopyRequest.group_to == node.group).execute()
-
-    if HPSS_SCRIPT_DIR is None:
-        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
 
     script_name = _create_hpss_pull_script(requests_to_process, node)
     log.info('Submitting HPSS job %s' % script_name)
