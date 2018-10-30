@@ -794,7 +794,7 @@ def unmount(root_or_name):
             exit()
         try:
             node = di.StorageNode.get(root=root_or_name,
-                                      host=socket.gethostname())
+                                      host=socket.gethostname().split(".")[0])
         except pw.DoesNotExist:
             print "That is neither a node name nor a root name that is " \
                   "known. I quit."
