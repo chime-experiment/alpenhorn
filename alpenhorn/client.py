@@ -755,7 +755,7 @@ def mount(name, path, user, address, hostname):
 
     # Set the default hostname if required
     if hostname is None:
-        hostname = socket.gethostname()
+        hostname = socket.gethostname().split(".")[0]
         print "I will set the host to \"%s\"." % hostname
 
     # Set the parameters of this node
