@@ -455,10 +455,12 @@ def _import_file(node, root, acq_name, file_name):
     # Register the copy of the file here on the collection server, if (1) it does
     # not exist, or (2) it does exist but has been labelled as corrupt. If (2),
     # check again.
-    if not file.copies.where(di.ArchiveFileCopy.node == node).count():
-        copy = di.ArchiveFileCopy.create(file=file, node=node, has_file='Y',
-                                         wants_file='Y')
-        log.info("Registered file copy \"%s/%s\" to DB." % (acq_name, file_name))
+    # Use a transaction to avoid race condition
+    with di.database_proxy.transaction():
+        if not file.copies.where(di.ArchiveFileCopy.node == node).count():
+            copy = di.ArchiveFileCopy.create(file=file, node=node, has_file='Y',
+                                             wants_file='Y')
+            log.info("Registered file copy \"%s/%s\" to DB." % (acq_name, file_name))
 
     # Make sure information about the file exists in the DB.
     if ftype.name == "corr":
