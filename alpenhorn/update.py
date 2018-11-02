@@ -5,6 +5,7 @@ import time
 import datetime
 import re
 import socket
+import glob
 
 import peewee as pw
 from peewee import fn
@@ -25,6 +26,11 @@ RSYNC_OPTS = "--quiet --times --protect-args --perms --group --owner " \
 # Globals.
 done_transport_this_cycle = False
 
+# The path used for HPSS scripts and callbacks
+if 'ALPENHORN_HPSS_SCRIPT_DIR' in os.environ:
+    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
+else:
+    HPSS_SCRIPT_DIR = None
 
 def run_command(cmd, **kwargs):
     """Run a command.
@@ -77,6 +83,28 @@ def pbs_jobs():
 
     return [_parse_job(node) for node in qstat_xml.firstChild.childNodes ]
 
+def slurm_jobs():
+    """Fetch the jobs in the slurm queue on this host.
+
+    Returns
+    -------
+    jobs : dict
+    """
+
+    import getpass
+    user = getpass.getuser()
+
+    ret, out, err = run_command(('squeue -o %%all -u %s' % user).split())
+    lines = out.split('\n')
+    headers = lines[0].split('|')
+
+    jobs = []
+
+    for line in lines[1:-1]:
+        job = dict(zip(headers, line.split('|')))
+        jobs.append(job)
+
+    return jobs
 
 def queued_archive_jobs():
     """Fetch the info about jobs waiting in the archive queue.
@@ -86,9 +114,10 @@ def queued_archive_jobs():
     jobs: dict
     """
 
-    jobs = pbs_jobs()
+    jobs = slurm_jobs()
 
-    return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+    #return [ job for job in jobs if (job['job_state'] == 'Q' and job['queue'] == 'archivelong')]
+    return [ job for job in jobs if (job['ST'] == 'PD' and job['PARTITION'] == 'archivelong')]
 
 
 def is_md5_hash(h):
@@ -111,6 +140,9 @@ def update_loop(host):
     while True:
         loop_start = time.time()
         done_transport_this_cycle = False
+
+        # Deal with the HPSS callback hack
+        run_hpss_callbacks_from_file()
 
         # Iterate over nodes and perform each update (perform a new query
         # each time in case we get a new node, e.g. transport disk)
@@ -599,15 +631,51 @@ def _check_and_bundle_requests(requests, node):
 
     return requests_to_process
 
+def run_hpss_callbacks_from_file():
+    """Execute filesystem-based HPSS callbacks
+    """
+
+    # Do nothing if the HPSS script directory hasn't been defined
+    if HPSS_SCRIPT_DIR is None:
+        return
+
+    log.info('Processing HPSS callbacks')
+
+    # Compile the regex
+    prog = re.compile(".+/hpss-[^-]+-((?:push|pull)_(?:success|failed))-([0-9]+)-([0-9]+).callback$");
+
+    # Iterate over callback files in order
+    for cb in sorted(glob.glob(os.path.join(HPSS_SCRIPT_DIR, \
+                    "hpss-*-*-*-*.callback"))):
+        # The files are zero size.  All the information is in the filename
+        # itself
+
+        # Decompose the filename
+        match = prog.match(cb)
+
+        # Execute the callback, if decomposition worked
+        if match:
+            os.system("alpenhorn_hpss {0} {1} {2}".format(match.group(1),
+                match.group(2), match.group(3)))
+        else:
+            log.error("Incomprehensible callback: {0}".format(cb))
+
+        # Remove callback
+        os.unlink(cb)
+
 
 def update_node_hpss_inbound(node):
     """Process transfers into an HPSS node.
     """
 
-    if not is_hpss_node(node):
-        log.error('This is not an HPSS node.')
+    if HPSS_SCRIPT_DIR is None:
+        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
 
     log.info('Processing HPSS inbound transfers (%s)' % node.name)
+
+    if not is_hpss_node(node):
+        log.error('This is not an HPSS node.')
+        return
 
     # Fetch requests for transfer onto this node
     requests = di.ArchiveFileCopyRequest.select().where(
@@ -644,6 +712,10 @@ def update_node_hpss_inbound(node):
 def update_node_hpss_outbound(node):
     """Process transfers out of an HPSS tape node.
     """
+
+    # Do nothing if the HPSS script directory hasn't been defined
+    if HPSS_SCRIPT_DIR is None:
+        return
 
     log.info('Processing HPSS outbound transfers (%s)' % node.name)
 
@@ -691,11 +763,10 @@ def update_node_hpss_outbound(node):
 def _create_hpss_push_script(requests, node):
 
     start = """#!/bin/bash
-#PBS -l walltime=4:00:00
-#PBS -q archive
-#PBS -N push_%(jobname)s
-#PBS -j oe
-#PBS -m e
+#SBATCH -t 4:00:00
+#SBATCH -p archivelong
+#SBATCH -J pull_%(jobname)s
+#SBATCH -N 1
 
 # Transfer files from CHIME archive to HPSS
 
@@ -727,7 +798,8 @@ then
     hsi -q mv $DESTDIR/%(acq)s/tmp.%(file)s $DESTDIR/%(acq)s/%(file)s
 
     # Signal success
-    ssh %(host)s 'alpenhorn_hpss push_success %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss push_success %(file_id)i %(node_id)i'
+    touch %(cb_path)s/hpss-%(dtstring)s-push_success-%(file_id)i-%(node_id)i.callback
 
     echo 'Finished push.'
 else
@@ -735,7 +807,8 @@ else
     hsi -q rm $DESTDIR/%(acq)s/tmp.%(file)s
 
     # Signal failure
-    ssh %(host)s 'alpenhorn_hpss push_failed %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss push_failed %(file_id)i %(node_id)i'
+    touch %(cb_path)s/hpss-%(dtstring)s-push_failed-%(file_id)i-%(node_id)i.callback
 
     echo "Push failed."
 fi
@@ -745,8 +818,6 @@ fi
     dtstring = dtnow.strftime('%Y%m%dT%H%M%S')
 
     script = start % {'offline_node_root': node.root, 'jobname': dtstring}
-
-
 
     # Loop over files to construct push script
     for req in requests:
@@ -758,12 +829,12 @@ fi
             'file_hash': req.file.md5sum,
             'host': socket.gethostname(),
             'file_id': req.file.id,
-            'node_id': node.id
+            'node_id': node.id,
+            'cb_path': HPSS_SCRIPT_DIR,
+            'dtstring': dtstring
         }
 
         script += loop % req_dict
-
-    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
 
     script_name = HPSS_SCRIPT_DIR + '/push_%s.sh' % dtstring
 
@@ -776,11 +847,10 @@ fi
 def _create_hpss_pull_script(requests, node):
 
     start = """#!/bin/bash
-#PBS -l walltime=4:00:00
-#PBS -q archive
-#PBS -N pull_%(jobname)s
-#PBS -j oe
-#PBS -m e
+#SBATCH -t 4:00:00
+#SBATCH -p archivelong
+#SBATCH -J pull_%(jobname)s
+#SBATCH -N 1
 
 # Transfer files from HPSS into online archive
 
@@ -814,7 +884,8 @@ then
     mv $DESTDIR/%(acq)s/tmp.%(file)s $DESTDIR/%(acq)s/%(file)s
 
     # Signal success
-    ssh %(host)s 'alpenhorn_hpss pull_success %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss pull_success %(file_id)i %(node_id)i'
+    touch %(cb_path)s/hpss-%(dtstring)s-pull_success-%(file_id)i-%(node_id)i.callback
 
     echo 'Finished pull.'
 else
@@ -822,7 +893,8 @@ else
     rm $DESTDIR/%(acq)s/tmp.%(file)s
 
     # Signal failure
-    ssh %(host)s 'alpenhorn_hpss pull_failed %(file_id)i %(node_id)i'
+    #ssh %(host)s 'alpenhorn_hpss pull_failed %(file_id)i %(node_id)i'
+    touch %(cb_path)s/hpss-%(dtstring)s-pull_failed-%(file_id)i-%(node_id)i.callback
 
     echo "Pull failed."
 fi
@@ -843,12 +915,12 @@ fi
             'file_hash': req.file.md5sum,
             'host': socket.gethostname(),
             'file_id': req.file.id,
-            'node_id': node.id
+            'node_id': node.id,
+            'cb_path': HPSS_SCRIPT_DIR,
+            'dtstring': dtstring
         }
 
         script += loop % req_dict
-
-    HPSS_SCRIPT_DIR = os.environ['ALPENHORN_HPSS_SCRIPT_DIR']
 
     script_name = HPSS_SCRIPT_DIR + '/pull_%s.sh' % dtstring
 
@@ -859,4 +931,4 @@ fi
 
 
 def _submit_hpss_script(script):
-    os.system('ssh gpc04 "cd %s; qsub %s"' % os.path.split(script))
+    os.system('ssh nia-login07 "cd %s; sbatch %s"' % os.path.split(script))
