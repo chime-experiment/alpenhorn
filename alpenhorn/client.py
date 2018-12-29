@@ -393,6 +393,7 @@ def clean(node_name, days, size, force, now, target, acq):
         this_node = di.StorageNode.get(di.StorageNode.name == node_name)
     except pw.DoesNotExist:
         print "Specified node does not exist."
+        return
 
     # Check to see if we are on an archive node
     if this_node.storage_type == 'A':
@@ -407,7 +408,7 @@ def clean(node_name, days, size, force, now, target, acq):
     files = di.ArchiveFileCopy \
             .select(di.ArchiveFileCopy.id, di.ArchiveFileCopy.wants_file,
                     di.ArchiveFile.size_b).join(di.ArchiveFile) \
-            .where(di.ArchiveFileCopy.node == this_node)
+            .where(di.ArchiveFileCopy.node == this_node).order_by(di.ArchiveFile.id)
 
     # If size is specified, we select files that are currently on the node,
     # and ignore wants_file.  Otherwise, we select all files destined for
