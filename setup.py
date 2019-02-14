@@ -7,6 +7,7 @@ setup(
     packages=find_packages(),
 
     install_requires=['ch_util', 'h5py', 'mysqlclient', 'peewee >= 2.7.0',
+                      'tabulate',
                       'bitshuffle', 'netifaces', 'PyYAML', 'configobj', 'watchdog',
                       'ConcurrentLogHandler', 'Click'],
     entry_points="""
