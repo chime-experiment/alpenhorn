@@ -303,6 +303,33 @@ def get_filehkpinfo_keywords_from_h5(path):
             "finish_time": finish_times.max()}
 
 
+def get_filedigitalgaininfo_keywords_from_h5(path):
+    with h5py.File(path, "r") as f:
+        start_time = f["index_map/update_time"][0]
+        finish_time = f["index_map/update_time"][-1]
+
+    return {"start_time": start_time,
+            "finish_time": finish_time}
+
+
+def get_filecalibrationgaininfo_keywords_from_h5(path):
+    with h5py.File(path, "r") as f:
+        start_time = f["index_map/update_time"][0]
+        finish_time = f["index_map/update_time"][-1]
+
+    return {"start_time": start_time,
+            "finish_time": finish_time}
+
+
+def get_fileflaginputinfo_keywords_from_h5(path):
+    with h5py.File(path, "r") as f:
+        start_time = f["index_map/update_time"][0]
+        finish_time = f["index_map/update_time"][-1]
+
+    return {"start_time": start_time,
+            "finish_time": finish_time}
+
+
 def get_filerawinfo_keywords(rawinfo, size_b, file_name):
     chunk_num = int(file_name[:file_name.find(".")])
     log.debug("Rawinfo: %d %d %d" % (size_b, rawinfo.nframe, rawinfo.packet_len))
@@ -598,6 +625,45 @@ def _import_file(node, root, acq_name, file_name):
             except:
                 if not file.hkpinfos.count():
                     di.HKPFileInfo.create(file=file)
+                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                            (acq_name, file_name))
+    elif atype == "digitalgain" and ftype.name == "calibration":
+        if not file.digitalgaininfos.count():
+            try:
+                di.DigitalGainFileInfo.create(
+                    file=file,
+                    **get_filedigitalgaininfo_keywords_from_h5(fullpath))
+                log.info("Added information for file \"%s/%s\" to DB." %
+                         (acq_name, file_name))
+            except:
+                if not file.digitalgaininfos.count():
+                    di.DigitalGainFileInfo.create(file=file)
+                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                            (acq_name, file_name))
+    elif atype == "gain" and ftype.name == "calibration":
+        if not file.calibrationgaininfos.count():
+            try:
+                di.CalibrationGainFileInfo.create(
+                    file=file,
+                    **get_filecalibrationgaininfo_keywords_from_h5(fullpath))
+                log.info("Added information for file \"%s/%s\" to DB." %
+                         (acq_name, file_name))
+            except:
+                if not file.calibrationgaininfos.count():
+                    di.CalibrationGainFileInfo.create(file=file)
+                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
+                            (acq_name, file_name))
+    elif atype == "flaginput" and ftype.name == "calibration":
+        if not file.flaginputinfos.count():
+            try:
+                di.FlagInputFileInfo.create(
+                    file=file,
+                    **get_fileflaginputinfo_keywords_from_h5(fullpath))
+                log.info("Added information for file \"%s/%s\" to DB." %
+                         (acq_name, file_name))
+            except:
+                if not file.flaginputinfos.count():
+                    di.FlagInputFileInfo.create(file=file)
                 log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
                             (acq_name, file_name))
 
