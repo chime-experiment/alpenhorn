@@ -414,20 +414,6 @@ def _import_file(node, root, acq_name, file_name):
                                     **get_acqrawadcinfo_keywords_from_h5(acq_name))
             log.info("Added information for raw ADC acquisition \"%s\" to "
                      "DB." % acq_name)
-    elif atype == "raw":
-        try:
-            raw_info = acq.rawinfos.get()
-        except pw.DoesNotExist:
-            try:
-                raw_info = di.RawAcqInfo.create(acq=acq,
-                                                **get_rawinfo_keywords("%s/%s" %
-                                                                       (root, acq_name)))
-                log.info("Added information for raw acquisition \"%s\" to DB." %
-                         acq_name)
-            except:
-                log.info("Missing info in settings.dat for acquisition \"%s\". "
-                         "Skipping this acquisition." % acq_name)
-                return
 
     # Add the file, if necessary.
     try:
@@ -541,32 +527,6 @@ def _import_file(node, root, acq_name, file_name):
                 i.start_time = k["start_time"]
                 i.finish_time = k["finish_time"]
                 i.date = k["date"]
-                i.save()
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
-    if ftype.name == "raw":
-        # Add if (1) there is no rawinfo or (2) the rawinfo is missing.
-        if not file.rawinfos.count():
-            try:
-                di.RawFileInfo.create(file=file,
-                                      **get_filerawinfo_keywords(raw_info, size_b,
-                                                                 file_name))
-                log.info("Added information for file \"%s/%s\" to DB." %
-                         (acq_name, file_name))
-            except:
-                if not file.corrinfos.count():
-                    di.RawFileInfo.create(file=file)
-                log.warning("Missing info for file \"%s/%s\". Leaving fields NULL." %
-                            (acq_name, file_name))
-        elif not file.rawinfos[0].start_time:
-            try:
-                i = file.rawinfos[0]
-                k = get_filerawinfo_keywords(raw_info, size_b, file_name)
-            except:
-                log.debug("Still missing info for file \"%s/%s\".")
-            else:
-                i.start_time = k["start_time"]
-                i.chunk_number = k["chunk_number"]
                 i.save()
                 log.info("Added information for file \"%s/%s\" to DB." %
                          (acq_name, file_name))
