@@ -572,19 +572,25 @@ def is_hpss_node(node):
     return (node.address == 'HPSS')
 
 
-def _check_and_bundle_requests(requests, node):
+def _check_and_bundle_requests(requests, node, pull=False):
     """Find eligible HPSS transfer requests, and return a bundle of them up to
     some maximum size."""
 
     # Size to bundle transfers into (in bytes)
     max_bundle_size = 800.0 * 2**30.0
 
+    # Due to fixed, per-file overheads, we limit the number of files pulled
+    # by a single job.  For a four hour jobspec, this works out to ten files
+    # per hour, which seems to be reasonable.  Pushes don't require this
+    # limitation
+    req_limit = 40 if pull else 500
+
     bundle_size = 0.0
     requests_to_process = []
 
     # Construct list of requests to process by finding eligible requests up to
     # the maximum single transfer size
-    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(500):
+    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(req_limit):
 
         # Check to ensure both source and dest nodes are on the same host
         if req.node_from.host != node.host:
@@ -687,7 +693,7 @@ def update_node_hpss_inbound(node):
     )
 
     # Get the requests we should actually process
-    requests_to_process = _check_and_bundle_requests(requests, node)
+    requests_to_process = _check_and_bundle_requests(requests, node, pull=False)
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
@@ -737,7 +743,7 @@ def update_node_hpss_outbound(node):
     requests = requests.join(di.StorageNode).where(di.StorageNode.address == 'HPSS')
 
     # Get the requests we should actually process
-    requests_to_process = _check_and_bundle_requests(requests, node)
+    requests_to_process = _check_and_bundle_requests(requests, node, pull=True)
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
