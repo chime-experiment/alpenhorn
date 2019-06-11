@@ -1,5 +1,12 @@
 """Routines for updating the state of a node.
 """
+# === Start Python 2/3 compatibility
+from __future__ import (absolute_import, division,
+                        print_function, unicode_literals)
+from future.builtins import *  # noqa  pylint: disable=W0401, W0614
+from future.builtins.disabled import *  # noqa  pylint: disable=W0401, W0614
+# === End Python 2/3 compatibility
+
 import os
 import time
 import datetime
@@ -101,7 +108,7 @@ def slurm_jobs():
     jobs = []
 
     for line in lines[1:-1]:
-        job = dict(zip(headers, line.split('|')))
+        job = dict(list(zip(headers, line.split('|'))))
         jobs.append(job)
 
     return jobs
@@ -677,7 +684,7 @@ def update_node_hpss_inbound(node):
     """
 
     if HPSS_SCRIPT_DIR is None:
-        raise KeyError, "ALPENHORN_HPSS_SCRIPT_DIR not found in environment."
+        raise KeyError("ALPENHORN_HPSS_SCRIPT_DIR not found in environment.")
 
     log.info('Processing HPSS inbound transfers (%s)' % node.name)
 
