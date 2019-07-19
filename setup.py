@@ -9,14 +9,17 @@ from setuptools import setup, find_packages
 
 setup(
     name='alpenhorn',
-    version=0.1,
+    version=0.2,
 
     packages=find_packages(),
 
-    install_requires=['ch_util', 'h5py', 'mysqlclient', 'peewee >= 2.7.0, <3',
-                      'tabulate',
-                      'bitshuffle', 'netifaces', 'PyYAML', 'configobj', 'watchdog',
-                      'ConcurrentLogHandler', 'Click'],
+    install_requires=[
+        'chimedb @ git+ssh://git@github.com/chime-experiment/chimedb.git',
+        'chimedb.data_index @ git+ssh://git@github.com/chime-experiment/chimedb_di.git',
+        'h5py', 'mysqlclient', 'peewee >= 2.7.0, <3', 'tabulate',
+        'bitshuffle', 'netifaces', 'PyYAML', 'configobj', 'watchdog',
+        'ConcurrentLogHandler', 'Click'
+        ],
     entry_points="""
         [console_scripts]
         alpenhorn=alpenhorn.client:cli

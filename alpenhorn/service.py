@@ -13,7 +13,8 @@ import socket
 import click
 
 from alpenhorn import logger
-from ch_util import data_index as di
+import chimedb.core as db
+import chimedb.data_index as di
 from alpenhorn import update, auto_import
 
 log = logger.get_log()
@@ -35,13 +36,14 @@ def cli():
     """
 
     # We need write access to the DB.
-    di.connect_database(read_write=True)
+    db.connect(read_write=True)
 
     # Get the name of this host
     host = socket.gethostname().split(".")[0]
 
     # Get the list of nodes currently mounted
-    node_list = list(di.StorageNode.select().where(di.StorageNode.host == host, di.StorageNode.mounted))
+    node_list = list(di.StorageNode.select().where(
+        di.StorageNode.host == host, di.StorageNode.mounted))
 
     # Warn if there are no mounted nodes. We used to exit here, but actually
     # it's useful to keep alpenhornd running for nodes where we exclusively use

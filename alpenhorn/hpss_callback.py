@@ -11,7 +11,8 @@ from future.builtins.disabled import *  # noqa  pylint: disable=W0401, W0614
 import peewee as pw
 import click
 
-from ch_util import data_index as di
+import chimedb.core as db
+import chimedb.data_index.orm as di
 
 from . import logger  # Import logger here to avoid connection
                       # messages for transfer
@@ -19,8 +20,8 @@ from . import logger  # Import logger here to avoid connection
 # Get a reference to the log
 log = logger.get_log()
 
-# Reconnect to the database read/write
-di.connect_database(read_write=True)
+# Connect to the database read/write
+db.connect(read_write=True)
 
 
 @click.group()

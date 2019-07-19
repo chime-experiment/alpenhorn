@@ -17,7 +17,8 @@ import glob
 import peewee as pw
 from peewee import fn
 
-from ch_util import data_index as di
+import chimedb.core as db
+import chimedb.data_index as di
 
 # Setup the logging
 from . import logger
@@ -197,7 +198,7 @@ def update_node_integrity(node):
 
         # If the file exists calculate its md5sum and check against the DB
         if os.path.exists(fullpath):
-            if di.md5sum_file(fullpath) == fcopy.file.md5sum:
+            if di.util.md5sum_file(fullpath) == fcopy.file.md5sum:
                 log.info("File is A-OK!")
                 fcopy.has_file = 'Y'
             else:
@@ -241,7 +242,8 @@ def update_node_delete(node):
             break
 
         # Get all the *other* copies.
-        other_copies = fcopy.file.copies.where(di.ArchiveFileCopy.id != fcopy.id)
+        other_copies = fcopy.file.copies.where(
+                di.ArchiveFileCopy.id != fcopy.id)
 
         # Get the number of copies on archive nodes
         ncopies = other_copies.join(di.StorageNode) \
@@ -255,7 +257,7 @@ def update_node_delete(node):
 
             # Use transaction such that errors thrown in the os.remove do not leave
             # the database inconsistent.
-            with di.database_proxy.transaction():
+            with db.proxy.transaction():
                 if os.path.exists(fullpath):
                     os.remove(fullpath)  # Remove the actual file
 
@@ -295,8 +297,10 @@ def update_node_requests(node):
         return
 
     # Calculate the total archive size from the database
-    size_query = di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b)).join(di.ArchiveFileCopy).where(
-        di.ArchiveFileCopy.node == node, di.ArchiveFileCopy.has_file=='Y')
+    size_query = di.ArchiveFile.select(fn.Sum(di.ArchiveFile.size_b)) \
+            .join(di.ArchiveFileCopy).where(
+                    di.ArchiveFileCopy.node == node,
+                    di.ArchiveFileCopy.has_file=='Y')
     size = size_query.scalar(as_tuple=True)[0]
     current_size_gb = float(0.0 if size is None else size) / 2**30.0
 
@@ -321,7 +325,8 @@ def update_node_requests(node):
     )
 
     # Add in constraint that node_from cannot be an HPSS node
-    requests = requests.join(di.StorageNode).where(di.StorageNode.address != 'HPSS')
+    requests = requests.join(di.StorageNode) \
+            .where(di.StorageNode.address != 'HPSS')
 
     for req in requests:
 
@@ -485,7 +490,7 @@ def update_node_requests(node):
 
             # Update the FileCopy (if exists), or insert a new FileCopy
             # Use transaction to avoid race condition
-            with di.database_proxy.transaction():
+            with db.proxy.transaction():
                 try:
                     done = False
                     while not done:
@@ -503,10 +508,13 @@ def update_node_requests(node):
                             log.error("MySQL connexion dropped. Will attempt to reconnect in "
                                       "five seconds.")
                             time.sleep(5)
-                            di.connect_database(True)
+                            db.connect(True)
                 except pw.DoesNotExist:
-                    di.ArchiveFileCopy.insert(file=req.file, node=node, has_file='Y',
-                                              wants_file='Y').execute()
+                    di.ArchiveFileCopy.insert(
+                            file=req.file,
+                            node=node,
+                            has_file='Y',
+                            wants_file='Y').execute()
 
             # Mark any FileCopyRequest for this file as completed
             di.ArchiveFileCopyRequest.update(completed=True).where(
@@ -597,7 +605,8 @@ def _check_and_bundle_requests(requests, node, pull=False):
 
     # Construct list of requests to process by finding eligible requests up to
     # the maximum single transfer size
-    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(req_limit):
+    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id) \
+            .limit(req_limit):
 
         # Check to ensure both source and dest nodes are on the same host
         if req.node_from.host != node.host:
@@ -605,9 +614,10 @@ def _check_and_bundle_requests(requests, node, pull=False):
             continue
 
         # Check that there is actually a copy of the file at the source
-        filecopy_src = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
-                                                         di.ArchiveFileCopy.node == req.node_from,
-                                                         di.ArchiveFileCopy.has_file == 'Y')
+        filecopy_src = di.ArchiveFileCopy.select().where(
+                di.ArchiveFileCopy.file == req.file,
+                di.ArchiveFileCopy.node == req.node_from,
+                di.ArchiveFileCopy.has_file == 'Y')
         if not filecopy_src.exists():
             log.error("Skipping request for %s/%s since it is not available on "
                       "node \"%s\". [file_id=%i]" % (req.file.acq.name,
@@ -617,9 +627,10 @@ def _check_and_bundle_requests(requests, node, pull=False):
             continue
 
         # Check if there is already a copy at the destination, and skip the request if there is
-        filecopy_dst = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
-                                                         di.ArchiveFileCopy.node == node,
-                                                         di.ArchiveFileCopy.has_file == 'Y')
+        filecopy_dst = di.ArchiveFileCopy.select().where(
+                di.ArchiveFileCopy.file == req.file,
+                di.ArchiveFileCopy.node == node,
+                di.ArchiveFileCopy.has_file == 'Y')
         if filecopy_dst.exists():
 
             log.info("Skipping request for %s/%s since it already exists on "

@@ -1,7 +1,6 @@
 """Alpenhorn client interface."""
 # === Start Python 2/3 compatibility
-from __future__ import (absolute_import, division,
-                        print_function, unicode_literals)
+from __future__ import (absolute_import, division, print_function)
 from future.builtins import *  # noqa  pylint: disable=W0401, W0614
 from future.builtins.disabled import *  # noqa  pylint: disable=W0401, W0614
 # === End Python 2/3 compatibility
@@ -10,13 +9,15 @@ from future.builtins.disabled import *  # noqa  pylint: disable=W0401, W0614
 import sys
 import time
 import os
+import glob
 import datetime
+import socket
 
 import click
 import peewee as pw
 
-from ch_util import data_index as di
-from ch_util import ephemeris
+import chimedb.core as db
+import chimedb.data_index as di
 
 
 @click.group()
@@ -48,23 +49,25 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
     """
 
     # Make sure we connect RW
-    di.connect_database(read_write=True)
+    db.connect(read_write=True)
 
     try:
         from_node = di.StorageNode.get(name=node_name)
     except pw.DoesNotExist:
-        raise Exception("Node \"%s\" does not exist in the DB." % node_name)
+        raise db.NotFoundError("Node \"%s\" does not exist in the DB." % node_name)
     try:
         to_group = di.StorageGroup.get(name=group_name)
     except pw.DoesNotExist:
-        raise Exception("Group \"%s\" does not exist in the DB." % group_name)
+        raise db.NotFoundError("Group \"%s\" does not exist in the DB." % group_name)
 
     # Construct list of file copies that are available on the source node, and
     # not available on any nodes at the destination. This query is quite complex
     # so I've broken it up...
 
     # First get the nodes at the destination...
-    nodes_at_dest = di.StorageNode.select().where(di.StorageNode.group == to_group)
+    nodes_at_dest = di.StorageNode.select().where(
+            di.StorageNode.group == to_group
+            )
 
     # Then use this to get a list of all files at the destination...
     files_at_dest = di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
@@ -87,10 +90,12 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         try:
             target_group = di.StorageGroup.get(name=target)
         except pw.DoesNotExist:
-            raise RuntimeError("Target group \"%s\" does not exist in the DB." % target)
+            raise db.NotFoundError("Target group \"%s\" does not exist in the DB." % target)
 
         # First get the nodes at the destination...
-        nodes_at_target = di.StorageNode.select().where(di.StorageNode.group == target_group)
+        nodes_at_target = di.StorageNode.select().where(
+                di.StorageNode.group == target_group
+                )
 
         # Then use this to get a list of all files at the destination...
         files_at_target = di.ArchiveFile.select().join(di.ArchiveFileCopy).where(
@@ -130,7 +135,7 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
         try:
             acq = di.ArchiveAcq.get(name=acq)
         except pw.DoesNotExist:
-            raise Exception("Acquisition \"%s\" does not exist in the DB." % acq)
+            raise db.NotFoundError("Acquisition \"%s\" does not exist in the DB." % acq)
 
         # Restrict files to be in the acquisition
         copy = copy.where(di.ArchiveFile.acq == acq)
@@ -185,12 +190,13 @@ def sync(node_name, group_name, acq, force, nice, target, transport, show_acq, s
 
         # Perform an update of all the existing copy requests
         if len(files_in) > 0:
-            update = di.ArchiveFileCopyRequest.update(nice=nice, completed=False, cancelled=False, timestamp=dtnow,
-                                                      n_requests=di.ArchiveFileCopyRequest.n_requests + 1)
+            update = di.ArchiveFileCopyRequest.update(nice=nice,
+                    completed=False, cancelled=False, timestamp=dtnow,
+                    n_requests=di.ArchiveFileCopyRequest.n_requests + 1)
 
             update = update.where(di.ArchiveFileCopyRequest.file << files_in,
-                                  di.ArchiveFileCopyRequest.group_to == to_group,
-                                  di.ArchiveFileCopyRequest.node_from == from_node)
+                    di.ArchiveFileCopyRequest.group_to == to_group,
+                    di.ArchiveFileCopyRequest.node_from == from_node)
             update.execute()
 
         # Insert any new requests
@@ -213,24 +219,31 @@ def status(all):
 
     import tabulate
 
-    di.connect_database()
+    db.connect()
 
     # Data to fetch from the database (node name, total files, total size)
-    query_info = (di.StorageNode.name, pw.fn.Count(di.ArchiveFileCopy.id).alias('count'),
-        pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size'), di.StorageNode.host, di.StorageNode.root
+    query_info = (
+            di.StorageNode.name,
+            pw.fn.Count(di.ArchiveFileCopy.id).alias('count'),
+            pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size'),
+            di.StorageNode.host,
+            di.StorageNode.root
     )
 
     # Per node totals
-    nodes = di.StorageNode.select(*query_info)\
-    .join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.has_file=='Y')\
-    .join(di.ArchiveFile).group_by(di.StorageNode).order_by(di.StorageNode.name)
+    nodes = di.StorageNode.select(*query_info) \
+            .join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.has_file=='Y') \
+            .join(di.ArchiveFile).group_by(di.StorageNode) \
+            .order_by(di.StorageNode.name)
 
     if not all:
         nodes = nodes.where(di.StorageNode.mounted)
 
     # Totals for the whole archive
-    tot = di.ArchiveFile.select(pw.fn.Count(di.ArchiveFile.id).alias('count'),
-                                pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size')).scalar(as_tuple=True)
+    tot = di.ArchiveFile.select(
+            pw.fn.Count(di.ArchiveFile.id).alias('count'),
+            pw.fn.Sum(di.ArchiveFile.size_b).alias('total_size')
+            ).scalar(as_tuple=True)
 
     data = [[node[0], int(node[1]), int(node[2]) / 2**40.0,
              100.0 * int(node[1]) / int(tot[0]), 100.0 * int(node[2]) / int(tot[1]),
@@ -250,9 +263,8 @@ def status(all):
 def verify(node_name, md5, fixdb, acq):
     """Verify the archive on NODE against the database.
     """
-    import os
 
-    di.connect_database()
+    db.connect()
 
     try:
         this_node = di.StorageNode.get(di.StorageNode.name == node_name)
@@ -300,7 +312,7 @@ def verify(node_name, md5, fixdb, acq):
                 continue
 
             if md5:
-                file_md5 = di.md5sum_file(filepath)
+                file_md5 = di.util.md5sum_file(filepath)
                 corrupt = (file_md5 != md5sum)
             else:
                 corrupt = (os.path.getsize(filepath) != filesize)
@@ -335,7 +347,7 @@ def verify(node_name, md5, fixdb, acq):
     if fixdb:
 
         # Make sure we connect RW
-        di.connect_database(read_write=True)
+        db.connect(read_write=True)
 
         if (len(missing_files) > 0) and click.confirm('Fix missing files'):
             missing_count = di.ArchiveFileCopy\
@@ -384,8 +396,7 @@ def clean(node_name, days, size, force, now, target, acq):
     The --size and --days flags are mutually exclusive.
     """
 
-    import peewee as pw
-    di.connect_database(read_write=True)
+    db.connect(read_write=True)
 
     # Check for clashing arguments
     if days is not None and size is not None:
@@ -412,10 +423,13 @@ def clean(node_name, days, size, force, now, target, acq):
 
     # Select FileCopys on this node.
 
-    files = di.ArchiveFileCopy \
-            .select(di.ArchiveFileCopy.id, di.ArchiveFileCopy.wants_file,
-                    di.ArchiveFile.size_b).join(di.ArchiveFile) \
-            .where(di.ArchiveFileCopy.node == this_node).order_by(di.ArchiveFile.id)
+    files = di.ArchiveFileCopy.select(
+            di.ArchiveFileCopy.id,
+            di.ArchiveFileCopy.wants_file,
+            di.ArchiveFile.size_b
+        ).join(di.ArchiveFile).where(
+            di.ArchiveFileCopy.node == this_node
+        ).order_by(di.ArchiveFile.id)
 
     # If size is specified, we select files that are currently on the node,
     # and ignore wants_file.  Otherwise, we select all files destined for
@@ -430,7 +444,7 @@ def clean(node_name, days, size, force, now, target, acq):
         try:
             acq = di.ArchiveAcq.get(name=acq)
         except pw.DoesNotExit:
-            raise RuntimeError("Specified acquisition %s does not exist" % acq)
+            raise db.NotFoundError("Specified acquisition %s does not exist" % acq)
 
         files_in_acq = di.ArchiveFile.select().where(di.ArchiveFile.acq == acq)
 
@@ -443,7 +457,7 @@ def clean(node_name, days, size, force, now, target, acq):
         try:
             target_group = di.StorageGroup.get(name=target)
         except pw.DoesNotExist:
-            raise RuntimeError("Target group \"%s\" does not exist in the DB." % target)
+            raise db.NotFoundError("Target group \"%s\" does not exist in the DB." % target)
 
         # First get the nodes at the destination...
         nodes_at_target = di.StorageNode.select().where(di.StorageNode.group == target_group)
@@ -464,7 +478,7 @@ def clean(node_name, days, size, force, now, target, acq):
 
         # Get the time for the oldest files to keep
         oldest = datetime.datetime.now() - datetime.timedelta(days)
-        oldest_unix = ephemeris.ensure_unix(oldest)
+        oldest_unix = (oldest - datetime.datetime(1970,1,1)).total_seconds()
 
         # List of filetypes we want to update, needs a human readable name and a
         # FileInfo table.
@@ -486,8 +500,10 @@ def clean(node_name, days, size, force, now, target, acq):
             count = oldfiles.count()
 
             if count > 0:
-                size_bytes = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.id << local_file_ids)\
-                    .join(di.ArchiveFile).aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+                size_bytes = di.ArchiveFileCopy.select() \
+                        .where(di.ArchiveFileCopy.id << local_file_ids) \
+                        .join(di.ArchiveFile) \
+                        .aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
 
                 size_gb = int(size_bytes) / 2**30.0
 
@@ -567,16 +583,16 @@ def clean(node_name, days, size, force, now, target, acq):
 @click.option('--host', '-H', help='use specified host rather than local machine', type=str, default=None)
 def mounted(host):
     """list the nodes mounted on this, or another specified, machine"""
-    import socket
 
-    di.connect_database()
+    db.connect()
 
     if host is None:
         host = socket.gethostname().split(".")[0]
     zero = True
     for node in di.StorageNode \
                   .select() \
-                  .where(di.StorageNode.host == host, di.StorageNode.mounted == True):
+                  .where(di.StorageNode.host == host,
+                          di.StorageNode.mounted == True):
         n_file = di.ArchiveFileCopy \
                    .select() \
                    .where(di.ArchiveFileCopy.node == node) \
@@ -595,15 +611,13 @@ def format_transport(serial_num):
     database. The disk is specified using the manufacturers
     SERIAL_NUM, which is printed on the disk.
     """
-    import os
-    import glob
 
     if os.getuid() != 0:
         print("You must be root to run mount on a transport disc. I quit.")
         return
 
     # Make sure we connect RW
-    di.connect_database(read_write=True)
+    db.connect(read_write=True)
 
     # Find the disc.
     dev = glob.glob("/dev/disk/by-id/*%s" % serial_num)
@@ -694,7 +708,7 @@ def format_transport(serial_num):
             exit()
 
         # We need to write to the database.
-        di.connect_database(read_write=True)
+        db.connect(read_write=True)
         node = di.StorageNode.create(name=name, root=root, group=group,
                                      storage_type="T", min_avail_gb=1)
 
@@ -747,10 +761,8 @@ def unmount_transport(ctx, node):
 def mount(name, path, user, address, hostname):
     """Interactive routine for mounting a storage node located at ROOT."""
 
-    import socket
-
     # We need to write to the database.
-    di.connect_database(read_write=True)
+    db.connect(read_write=True)
 
     try:
         node = di.StorageNode.get(name=name)
@@ -784,11 +796,9 @@ def mount(name, path, user, address, hostname):
 @click.argument("root_or_name")
 def unmount(root_or_name):
     """Unmount a storage node with location or named ROOT_OR_NAME."""
-    import os
-    import socket
 
     # We need to write to the database.
-    di.connect_database(read_write=True)
+    db.connect(read_write=True)
 
     try:
         node = di.StorageNode.get(name=root_or_name)
@@ -827,10 +837,7 @@ def import_files(node_name, verbose, acq, dry):
     This command is useful for manually maintaining an archive where we can run
     alpenhornd in the usual manner.
     """
-    import glob
-    from ch_util import data_index as di
-    di.connect_database(read_write=True)
-    import peewee as pw
+    db.connect(read_write=True)
 
     # Construct list of acqs to scan
     if acq is None:
@@ -847,7 +854,8 @@ def import_files(node_name, verbose, acq, dry):
 
     # Fetch a reference to the node
     try:
-        node = di.StorageNode.select().where(di.StorageNode.name == node_name).get()
+        node = di.StorageNode.select() \
+                .where(di.StorageNode.name == node_name).get()
     except pw.DoesNotExist:
         print("Unknown node.")
         return
@@ -857,13 +865,14 @@ def import_files(node_name, verbose, acq, dry):
         for acq_name in acq_iter:
 
             try:
-                di.parse_acq_name(acq_name)
-            except di.Validation:
+                di.util.parse_acq_name(acq_name)
+            except db.ValidationError:
                 not_acqs.append(acq_name)
                 continue
 
             try:
-                acq = di.ArchiveAcq.select().where(di.ArchiveAcq.name == acq_name).get()
+                acq = di.ArchiveAcq.select() \
+                        .where(di.ArchiveAcq.name == acq_name).get()
             except pw.DoesNotExist:
                 not_acqs.append(acq_name)
                 continue
@@ -873,10 +882,12 @@ def import_files(node_name, verbose, acq, dry):
             # Fetch lists of all files in this acquisition, and all
             # files in this acq with local copies
             file_names = [f.name for f in acq.files]
-            local_file_names = [f.name for f in acq.files.join(di.ArchiveFileCopy).where(di.ArchiveFileCopy.node == node)]
+            local_file_names = [
+                    f.name for f in acq.files.join(di.ArchiveFileCopy) \
+                            .where(di.ArchiveFileCopy.node == node)
+                    ]
 
             for fn in files:
-
                 f_name = os.path.split(fn)[1]
 
                 # Check if file exists in database
@@ -888,7 +899,10 @@ def import_files(node_name, verbose, acq, dry):
                 if f_name in local_file_names:
                     registered_files.append(fn)
                 else:
-                    archive_file = di.ArchiveFile.select().where(di.ArchiveFile.name == f_name, di.ArchiveFile.acq == acq).get()
+                    archive_file = di.ArchiveFile.select().where(
+                            di.ArchiveFile.name == f_name,
+                            di.ArchiveFile.acq == acq
+                    ).get()
 
                     if (os.path.getsize(fn) != archive_file.size_b):
                         corrupt_files.append(fn)
@@ -896,7 +910,11 @@ def import_files(node_name, verbose, acq, dry):
 
                     added_files.append(fn)
                     if not dry:
-                        di.ArchiveFileCopy.create(file=archive_file, node=node, has_file='Y', wants_file='Y')
+                        di.ArchiveFileCopy.create(
+                                file=archive_file,
+                                node=node,
+                                has_file='Y',
+                                wants_file='Y')
 
     print("\n==== Summary ====")
     print()
@@ -938,8 +956,6 @@ MAX_E2LABEL_LEN = 16
 
 
 def get_e2label(dev):
-    import os
-
     pin, pout, perr = os.popen3("/sbin/e2label %s" % dev, "r")
     pin.close()
     res = pout.read().strip()
@@ -952,8 +968,6 @@ def get_e2label(dev):
 
 
 def get_mount_device(path):
-    import os
-
     p = os.popen("mount", "r")
     res = p.read()
     p.close()
