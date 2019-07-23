@@ -11,6 +11,7 @@ import time
 import os
 import glob
 import datetime
+import time
 import socket
 
 import click
@@ -475,10 +476,8 @@ def clean(node_name, days, size, force, now, target, acq):
     # If --days has been set we need to restrict to files older than the given
     # time. This only works for a few particular file types
     if days is not None and days > 0:
-
         # Get the time for the oldest files to keep
-        oldest = datetime.datetime.now() - datetime.timedelta(days)
-        oldest_unix = (oldest - datetime.datetime(1970,1,1)).total_seconds()
+        oldest_unix = time.time() - 24 * 3600 * days
 
         # List of filetypes we want to update, needs a human readable name and a
         # FileInfo table.
