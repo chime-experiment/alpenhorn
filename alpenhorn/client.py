@@ -740,7 +740,7 @@ def mount_transport(ctx, node, user, address):
 @click.pass_context
 @click.argument("node")
 def unmount_transport(ctx, node):
-    """Mount a transport disk into the system and then make it available to alpenhorn.
+    """Unmount a transport disk from the system.
     """
 
     mnt_point = "/mnt/%s" % node
