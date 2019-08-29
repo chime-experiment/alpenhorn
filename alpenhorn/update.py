@@ -419,9 +419,9 @@ def update_node_requests(node):
 
             # Next try rsync over ssh.
             elif command_available('rsync'):
-                cmd = 'rsync --compress {0} ' \
-                        + '--rsync-path="ionice -c4 -n4 rsync" ' \
-                        + '--rsh="ssh -q" {1} {2}'.format(RSYNC_OPTS,
+                cmd = ('rsync --compress {0} ' \
+                        + '--rsync-path="ionice -c2 -n4 rsync" ' \
+                        + '--rsh="ssh -q" {1} {2}').format(RSYNC_OPTS,
                                 from_path, to_path)
                 ret, stdout, stderr = run_command(cmd.split())
 
