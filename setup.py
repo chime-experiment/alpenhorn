@@ -16,7 +16,7 @@ setup(
     install_requires=[
         'chimedb @ git+ssh://git@github.com/chime-experiment/chimedb.git',
         'chimedb.data_index @ git+ssh://git@github.com/chime-experiment/chimedb_di.git',
-        'h5py', 'mysqlclient', 'peewee >= 2.7.0, <3', 'tabulate',
+        'h5py', 'mysqlclient', 'peewee >= 3', 'tabulate',
         'bitshuffle', 'netifaces', 'PyYAML', 'configobj', 'watchdog',
         'ConcurrentLogHandler', 'Click'
         ],
