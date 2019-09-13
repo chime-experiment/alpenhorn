@@ -1,9 +1,9 @@
 """Alpenhorn service."""
 # === Start Python 2/3 compatibility
-from __future__ import (absolute_import, division,
-                        print_function, unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 from future.builtins import *  # noqa  pylint: disable=W0401, W0614
 from future.builtins.disabled import *  # noqa  pylint: disable=W0401, W0614
+
 # === End Python 2/3 compatibility
 
 
@@ -22,6 +22,7 @@ log = logger.get_log()
 
 # Register Hook to Log Exception
 # ==============================
+
 
 def log_exception(*args):
     log.error("Fatal error!", exc_info=args)
@@ -42,14 +43,17 @@ def cli():
     host = socket.gethostname().split(".")[0]
 
     # Get the list of nodes currently mounted
-    node_list = list(di.StorageNode.select().where(
-        di.StorageNode.host == host, di.StorageNode.mounted))
+    node_list = list(
+        di.StorageNode.select().where(
+            di.StorageNode.host == host, di.StorageNode.mounted
+        )
+    )
 
     # Warn if there are no mounted nodes. We used to exit here, but actually
     # it's useful to keep alpenhornd running for nodes where we exclusively use
     # transport disks (e.g. jingle)
     if len(node_list) == 0:
-        log.warn("No nodes on this host (\"%s\") registered in the DB!" % host)
+        log.warn('No nodes on this host ("%s") registered in the DB!' % host)
 
     # Load the cache of already imported files
     auto_import.load_import_cache()
@@ -63,7 +67,7 @@ def cli():
 
     # Exit cleanly on a keyboard interrupt
     except KeyboardInterrupt:
-        log.info('Exiting...')
+        log.info("Exiting...")
         auto_import.stop_observers()
 
     # Wait for watchdog threads to terminate
