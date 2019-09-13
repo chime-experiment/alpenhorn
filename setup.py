@@ -12,8 +12,8 @@ setup(
     version=0.2,
     packages=find_packages(),
     install_requires=[
-        "chimedb @ git+ssh://git@github.com/chime-experiment/chimedb.git",
-        "chimedb.data_index @ git+ssh://git@github.com/chime-experiment/chimedb_di.git",
+        "chimedb @ git+https://github.com/chime-experiment/chimedb.git",
+        "chimedb.data_index @ git+https://github.com/chime-experiment/chimedb_di.git",
         "h5py",
         "mysqlclient",
         "peewee >= 3",
