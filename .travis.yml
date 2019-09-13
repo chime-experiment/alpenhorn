@@ -20,7 +20,6 @@ before_install:
     - pip install pytest
     -
 install:
-    - pip install -r docs/rtd-requirements.txt
     - pip install .
 
 script:
