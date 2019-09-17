@@ -19,6 +19,7 @@ from peewee import fn
 
 import chimedb.core as db
 import chimedb.data_index as di
+import chimedb.data_index.util as di_util
 
 # Setup the logging
 from . import logger
@@ -214,7 +215,7 @@ def update_node_integrity(node):
 
         # If the file exists calculate its md5sum and check against the DB
         if os.path.exists(fullpath):
-            if di.util.md5sum_file(fullpath) == fcopy.file.md5sum:
+            if di_util.md5sum_file(fullpath) == fcopy.file.md5sum:
                 log.info("File is A-OK!")
                 fcopy.has_file = "Y"
             else:

@@ -20,6 +20,7 @@ import peewee as pw
 
 import chimedb.core as db
 import chimedb.data_index as di
+import chimedb.data_index.util as di_util
 
 
 @click.group()
@@ -384,7 +385,7 @@ def verify(node_name, md5, fixdb, acq):
                 continue
 
             if md5:
-                file_md5 = di.util.md5sum_file(filepath)
+                file_md5 = di_util.md5sum_file(filepath)
                 corrupt = file_md5 != md5sum
             else:
                 corrupt = os.path.getsize(filepath) != filesize
@@ -999,7 +1000,7 @@ def import_files(node_name, verbose, acq, dry):
         for acq_name in acq_iter:
 
             try:
-                di.util.parse_acq_name(acq_name)
+                di_util.parse_acq_name(acq_name)
             except db.ValidationError:
                 not_acqs.append(acq_name)
                 continue

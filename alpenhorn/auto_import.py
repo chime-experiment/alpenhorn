@@ -25,6 +25,7 @@ from watchdog.events import FileSystemEventHandler
 
 import chimedb.core as db
 import chimedb.data_index as di
+import chimedb.data_index.util as di_util
 
 # Setup the logging
 from . import logger
@@ -118,7 +119,7 @@ def join_observers():
 def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
     """Add an aquisition to the database.
     """
-    ts, inst, atype = di.util.parse_acq_name(name)
+    ts, inst, atype = di_util.parse_acq_name(name)
 
     # Is the acquisition already in the database?
     if di.ArchiveAcq.select(di.ArchiveAcq.id).where(di.ArchiveAcq.name == name).count():
@@ -197,7 +198,7 @@ def get_acqcorrinfo_keywords_from_h5(path):
 
 
 def get_acqhkinfo_keywords_from_h5(path):
-    fullpath = os.path.join(path, di.util.fname_atmel)
+    fullpath = os.path.join(path, di_util.fname_atmel)
     with open(fullpath, "r") as fp:
         ret = []
         for l in fp:
@@ -228,7 +229,7 @@ def get_filecorrinfo_keywords_from_h5(path):
     except:
         start_time = f["/index_map/time"][0][1]
         finish_time = f["/index_map/time"][-1][1]
-    chunk_number, freq_number = di.util.parse_corrfile_name(os.path.basename(path))
+    chunk_number, freq_number = di_util.parse_corrfile_name(os.path.basename(path))
     f.close()
     return {
         "start_time": start_time,
@@ -242,7 +243,7 @@ def get_fileweatherinfo_keywords_from_h5(path):
     f = h5py.File(path, "r")
     start_time = f["/index_map/time"][0]
     finish_time = f["/index_map/time"][-1]
-    d = di.util.parse_weatherfile_name(os.path.basename(path))
+    d = di_util.parse_weatherfile_name(os.path.basename(path))
     f.close()
     return {"start_time": start_time, "finish_time": finish_time, "date": d}
 
@@ -260,7 +261,7 @@ def get_filehkinfo_keywords_from_h5(path):
     f = h5py.File(path, "r")
     start_time = f["index_map/time"][0]
     finish_time = f["index_map/time"][-1]
-    chunk_number, atmel_name = di.util.parse_hkfile_name(os.path.basename(path))
+    chunk_number, atmel_name = di_util.parse_hkfile_name(os.path.basename(path))
     f.close()
     return {
         "start_time": start_time,
@@ -357,7 +358,7 @@ def _import_file(node, root, acq_name, file_name):
 
     # Parse the path
     try:
-        ts, inst, atype = di.util.parse_acq_name(acq_name)
+        ts, inst, atype = di_util.parse_acq_name(acq_name)
     except db.ValidationError:
         log.info("Skipping non-acquisition path %s." % acq_name)
         return
@@ -379,7 +380,7 @@ def _import_file(node, root, acq_name, file_name):
         log.info('Acquisition "%s" added to DB.' % acq_name)
 
     # What kind of file do we have?
-    ftype = di.util.detect_file_type(file_name)
+    ftype = di_util.detect_file_type(file_name)
     if ftype is None:
         log.info('Skipping unrecognised file "%s/%s".' % (acq_name, file_name))
         return
@@ -444,7 +445,7 @@ def _import_file(node, root, acq_name, file_name):
         log.debug('File "%s/%s" already in DB. Skipping.' % (acq_name, file_name))
     except pw.DoesNotExist:
         log.debug("Computing md5sum.")
-        md5sum = di.util.md5sum_file(fullpath, cmd_line=True)
+        md5sum = di_util.md5sum_file(fullpath, cmd_line=True)
         size_b = os.path.getsize(fullpath)
         done = False
         while not done:
