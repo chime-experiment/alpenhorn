@@ -185,7 +185,7 @@ def sync(
         for c in copy:
             print("%s/%s" % (c.file.acq.name, c.file.name))
 
-    size_bytes = copy.aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+    size_bytes = copy.select(pw.fn.Sum(di.ArchiveFile.size_b)).scalar()
     size_gb = int(size_bytes) / 1073741824.0
 
     print(
@@ -592,10 +592,10 @@ def clean(node_name, days, size, force, now, target, acq):
 
             if count > 0:
                 size_bytes = (
-                    di.ArchiveFileCopy.select()
-                    .where(di.ArchiveFileCopy.id << local_file_ids)
+                    di.ArchiveFileCopy.select(pw.fn.Sum(di.ArchiveFile.size_b))
                     .join(di.ArchiveFile)
-                    .aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+                    .where(di.ArchiveFileCopy.id << local_file_ids)
+                    .scalar()
                 )
 
                 size_gb = int(size_bytes) / 2 ** 30.0
@@ -651,10 +651,10 @@ def clean(node_name, days, size, force, now, target, acq):
 
         if count > 0:
             size_bytes = (
-                di.ArchiveFileCopy.select()
-                .where(di.ArchiveFileCopy.id << file_ids)
+                di.ArchiveFileCopy.select(pw.fn.Sum(di.ArchiveFile.size_b))
                 .join(di.ArchiveFile)
-                .aggregate(pw.fn.Sum(di.ArchiveFile.size_b))
+                .where(di.ArchiveFileCopy.id << file_ids)
+                .scalar()
             )
 
             size_gb = int(size_bytes) / 1073741824.0
