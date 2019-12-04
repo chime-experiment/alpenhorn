@@ -239,11 +239,27 @@ def get_filecorrinfo_keywords_from_h5(path):
 
 
 def get_fileweatherinfo_keywords_from_h5(path):
-    f = h5py.File(path, "r")
-    start_time = f["/index_map/time"][0]
-    finish_time = f["/index_map/time"][-1]
     d = di.util.parse_weatherfile_name(os.path.basename(path))
+
+    f = h5py.File(path, "r")
+    try:
+        start_time = f["/index_map/time"][0]
+        finish_time = f["/index_map/time"][-1]
+    except KeyError:
+        # This is for multistation weather data, which does not contain a
+        # "time" index map, but rather multiple "station_time_XXX" maps.
+        #
+        # Instead of trying to figure out the time span of the union of
+        # those, we just span the entire UTC day based on the filename
+        day = datetime.datetime.strptime(d, "%Y%m%d")
+        start_time = calendar.timegm(day.utctimetuple())
+        finish_time = calendar.timegm(
+            (
+                day + datetime.timedelta(days=1) - datetime.timedelta(seconds=1)
+            ).utctimetuple()
+        )
     f.close()
+
     return {"start_time": start_time, "finish_time": finish_time, "date": d}
 
 
