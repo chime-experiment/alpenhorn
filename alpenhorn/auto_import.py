@@ -325,18 +325,13 @@ def get_fileflaginputinfo_keywords_from_h5(path):
     return {"start_time": start_time, "finish_time": finish_time}
 
 
-def get_miscfile_data(path, _file):
-    """Get metadata for a misc-type tarball by reading it.
-
-    Returns a 2-tuple:
-    - first element is a dict with MiscFileInfo data, including _file
-    - second element is a list of dicts of MiscFileList rows
+def get_miscfile_data(path):
+    """Get metadata for a misc-type tarball by reading the METADATA.json file.
     """
 
     serial_number, data_type = di.util.parse_miscfile_name(os.path.basename(path))
     start_time = None
     finish_time = None
-    file_list = ()
 
     with tarfile.open(name=path, mode="r") as f:
         try:
@@ -346,29 +341,13 @@ def get_miscfile_data(path, _file):
             if "finish_time" in metadata:
                 start_time = metadata["finish_time"]
         except KeyError:
-            pass
-
-        # Generate a list of all regular files
-        file_list = [
-            {
-                "file": _file,
-                "name": member.name,
-                "size_b": member.size,
-                "mtime": member.mtime,
-            }
-            for member in f
-            if member.isfile()
-        ]
-
-    return (
-        {
-            "file": _file,
-            "start_time": start_time,
-            "finish_time": finish_time,
-            "data_type": data_type,
-        },
-        file_list,
-    )
+            metadata = None
+    return {
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "data_type": data_type,
+        "metadata": metadata,
+    }
 
 
 def get_filerawinfo_keywords(rawinfo, size_b, file_name):
@@ -720,10 +699,10 @@ def _import_file(node, root, acq_name, file_name):
     elif atype == "misc" and ftype.name == "miscellaneous":
         with db.proxy.atomic():
             if not file.miscfileinfos.count():
-                file_info_data, file_list = get_miscfile_data(fullpath, file)
-
-                di.MiscFileInfo.create(**file_info_data)
-                di.MiscFileList.insert_many(file_list).execute()
+                di.MiscFileInfo.create(file=file, **get_miscfile_data(fullpath))
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
 
     if import_done is not None:
         bisect.insort_left(import_done, fullpath)
