@@ -337,9 +337,33 @@ def get_miscfile_data(path):
         try:
             metadata = json.loads(f.extractfile(f.getmember("./METADATA.json")).read())
             if "start_time" in metadata:
-                start_time = metadata["start_time"]
+                try:
+                    start_time = calendar.timegm(
+                        datetime.datetime.strptime(
+                            metadata["start_time"], "%Y%m%dT%H%M%SZ"
+                        ).utctimetuple()
+                    )
+                except ValueError:
+                    log.warning(
+                        "Invalid start_time in misc tarball metadata: {0}".format(
+                            metadata["start_time"]
+                        )
+                    )
+
             if "finish_time" in metadata:
-                start_time = metadata["finish_time"]
+                try:
+                    finish_time = calendar.timegm(
+                        datetime.datetime.strptime(
+                            metadata["finish_time"], "%Y%m%dT%H%M%SZ"
+                        ).utctimetuple()
+                    )
+                except ValueError:
+                    log.warning(
+                        "Invalid finish_time in misc tarball metadata: {0}".format(
+                            metadata["finish_time"]
+                        )
+                    )
+
         except KeyError:
             metadata = None
     return {
