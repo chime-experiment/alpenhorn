@@ -343,6 +343,7 @@ def get_miscfile_data(path):
                             metadata["start_time"], "%Y%m%dT%H%M%SZ"
                         ).utctimetuple()
                     )
+                    del metadata["start_time"]
                 except ValueError:
                     log.warning(
                         "Invalid start_time in misc tarball metadata: {0}".format(
@@ -357,6 +358,7 @@ def get_miscfile_data(path):
                             metadata["finish_time"], "%Y%m%dT%H%M%SZ"
                         ).utctimetuple()
                     )
+                    del metadata["finish_time"]
                 except ValueError:
                     log.warning(
                         "Invalid finish_time in misc tarball metadata: {0}".format(
