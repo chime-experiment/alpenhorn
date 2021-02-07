@@ -33,8 +33,7 @@ sys.excepthook = log_exception
 
 @click.command()
 def cli():
-    """Alpenhorn data management service.
-    """
+    """Alpenhorn data management service."""
 
     # We need write access to the DB.
     db.connect(read_write=True)

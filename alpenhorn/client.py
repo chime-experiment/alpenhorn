@@ -14,6 +14,7 @@ import glob
 import datetime
 import time
 import socket
+from functools import reduce
 
 import click
 import peewee as pw
@@ -36,7 +37,11 @@ def cli():
     "--acq", help="Sync only this acquisition.", metavar="ACQ", type=str, default=None
 )
 @click.option("--force", "-f", help="proceed without confirmation", is_flag=True)
-@click.option("--nice", "-n", help="nice level for transfer", default=0)
+@click.option(
+    "--no-delegation",
+    help="don't delegate small files to a small-file group, even if one has been defined",
+    is_flag=True,
+)
 @click.option(
     "--target",
     metavar="TARGET_GROUP",
@@ -44,16 +49,10 @@ def cli():
     type=str,
     help="Only transfer files not available on this group.",
 )
-@click.option(
-    "--transport",
-    "-t",
-    is_flag=True,
-    help="[DEPRECATED] transport mode: only copy if fewer than two archived copies exist.",
-)
 @click.option("--show_acq", help="Summarise acquisitions to be copied.", is_flag=True)
 @click.option("--show_files", help="Show files to be copied.", is_flag=True)
 def sync(
-    node_name, group_name, acq, force, nice, target, transport, show_acq, show_files
+    node_name, group_name, acq, force, no_delegation, target, show_acq, show_files
 ):
     """Copy all files from NODE to GROUP that are not already present.
 
@@ -75,20 +74,18 @@ def sync(
     except pw.DoesNotExist:
         raise db.NotFoundError('Group "%s" does not exist in the DB.' % group_name)
 
+    # Check for a small file group
+    small_group = None
+    if not no_delegation:
+        small_group = to_group.small_group
+
     # Construct list of file copies that are available on the source node, and
     # not available on any nodes at the destination. This query is quite complex
     # so I've broken it up...
 
-    # First get the nodes at the destination...
-    nodes_at_dest = di.StorageNode.select().where(di.StorageNode.group == to_group)
-
-    # Then use this to get a list of all files at the destination...
-    files_at_dest = (
-        di.ArchiveFile.select()
-        .join(di.ArchiveFileCopy)
-        .where(
-            di.ArchiveFileCopy.node << nodes_at_dest, di.ArchiveFileCopy.has_file == "Y"
-        )
+    # Find all the files in the destination group
+    files_at_dest = files_in_group(
+        to_group, include_small_files=(small_group is not None)
     )
 
     # Then combine to get all file(copies) that are available at the source but
@@ -99,7 +96,7 @@ def sync(
         ~(di.ArchiveFileCopy.file << files_at_dest),
     )
 
-    # If the target option has been specified, only copy nodes also not
+    # If the target option has been specified, only copy files also not
     # available there...
     if target is not None:
 
@@ -111,46 +108,12 @@ def sync(
                 'Target group "%s" does not exist in the DB.' % target
             )
 
-        # First get the nodes at the destination...
-        nodes_at_target = di.StorageNode.select().where(
-            di.StorageNode.group == target_group
-        )
-
-        # Then use this to get a list of all files at the destination...
-        files_at_target = (
-            di.ArchiveFile.select()
-            .join(di.ArchiveFileCopy)
-            .where(
-                di.ArchiveFileCopy.node << nodes_at_target,
-                di.ArchiveFileCopy.has_file == "Y",
-            )
-        )
+        # The small group of a target is always checked (i.e. we ignore
+        # --no-delegation here)
+        files_at_target = files_in_group(target_group)
 
         # Only match files that are also not available at the target
         copy = copy.where(~(di.ArchiveFileCopy.file << files_at_target))
-
-    # In transport mode (DEPRECATED) we only move files that don't have an
-    # archive copy elsewhere...
-    if transport:
-        import warnings
-
-        warnings.warn("Transport mode is deprecated. Try to use --target instead.")
-
-        # Get list of other archive nodes
-        other_archive_nodes = di.StorageNode.select().where(
-            di.StorageNode.storage_type == "A", di.StorageNode.id != from_node
-        )
-
-        files_in_archive = (
-            di.ArchiveFile.select()
-            .join(di.ArchiveFileCopy)
-            .where(
-                di.ArchiveFileCopy.node << other_archive_nodes,
-                di.ArchiveFileCopy.has_file == "Y",
-            )
-        )
-
-        copy = copy.where(~(di.ArchiveFileCopy.file << files_in_archive))
 
     # Join onto ArchiveFile for later query parts
     copy = copy.join(di.ArchiveFile)
@@ -185,13 +148,26 @@ def sync(
         for c in copy:
             print("%s/%s" % (c.file.acq.name, c.file.name))
 
+    # here we separate small and large files
+    small_count = 0
+    if small_group:
+        small_copy = copy.where(di.ArchiveFile.size_b < to_group.small_size)
+        copy = copy.where(di.ArchiveFile.size_b >= to_group.small_size)
+        small_count = small_copy.count()
+        small_bytes = small_copy.select(pw.fn.Sum(di.ArchiveFile.size_b)).scalar()
+
+    # This is now only the large files, if applicable
     size_bytes = copy.select(pw.fn.Sum(di.ArchiveFile.size_b)).scalar()
-    size_gb = int(size_bytes) / 1073741824.0
 
     print(
-        "Will request that %d files (%.1f GB) be copied from node %s to group %s."
-        % (copy.count(), size_gb, node_name, group_name)
+        "Will request that %d files (%.1f GiB) be copied from node %s to group %s."
+        % (copy.count(), float(size_bytes) / 2 ** 30, node_name, group_name)
     )
+    if small_count > 0:
+        print(
+            "Also delegating requests for %d small files (%.1f GiB) to be copied from node %s to small-file group %s."
+            % (small_count, float(small_bytes) / 2 ** 30, node_name, small_group.name)
+        )
 
     if not (force or click.confirm("Do you want to proceed?")):
         print("Aborted.")
@@ -200,63 +176,226 @@ def sync(
     dtnow = datetime.datetime.now()
 
     # Perform update in a transaction to avoid any clobbering from concurrent updates
-    with di.ArchiveFileCopyRequest._meta.database.atomic():
+    with db.proxy.atomic():
+        update_copy_requests(copy, to_group, from_node, dtnow)
+        if small_count > 0:
+            update_copy_requests(small_copy, small_group, from_node, dtnow)
 
-        # Get a list of all the file ids for the copies we should perform
-        files_ids = [c.file_id for c in copy]
 
-        # Get a list of all the file ids for exisiting requests
-        requests = di.ArchiveFileCopyRequest.select().where(
+@cli.command()
+@click.argument("group_name", metavar="GROUP")
+@click.option("--fix", help="Fix out-of-place or duplicated files", is_flag=True)
+@click.option("--force", "-f", help="force cleaning on an archive node", is_flag=True)
+@click.option("--show-files", help="List problematic files.", is_flag=True)
+def smallfile(group_name, fix, force, show_files):
+    """Check or fix small-file delegations for the StorageGroup named GROUP.
+
+    When using --fix to fix out-of-place or duplicated files, you will typically
+    have to use it twice: the first use of --fix will queue up transfers to
+    and from the small-file group to move files to their appropriate locations.
+    Once the copying is complete, another use of --fix is required to trigger
+    removal of the now-duplicated files."""
+
+    db.connect(read_write=fix)
+
+    # Fetch the large-file group
+    try:
+        large_group = di.StorageGroup.get(name=group_name)
+    except pw.DoesNotExist:
+        print(
+            'Group "{0}" does not exist in the DB.'.format(group_name),
+        )
+        exit(1)
+
+    # Check the small-file group
+    small_group = large_group.small_group
+
+    # This is not an error
+    if small_group is None:
+        print(
+            'Group "{0}" has no associated small-file group.'.format(group_name),
+        )
+        exit(0)
+    small_name = small_group.name
+
+    # Files in large_group
+    large_files = files_in_group(large_group, include_small_files=False)
+
+    # Files in small_group
+    small_files = files_in_group(small_group)
+
+    # Find duplicates by intersection
+    lset = set(large_files)
+    sset = set(small_files)
+    dup = lset.intersection(sset)
+
+    # Remove duplicates from the sets
+    lset -= dup
+    sset -= dup
+
+    # Parition the duplicates
+    sdup = []
+    ldup = []
+    for item in dup:
+        if item.size_b < large_group.small_size:
+            sdup.append(item)
+        else:
+            ldup.append(item)
+
+    # Find small files in lset
+    move_to_small = [item for item in lset if item.size_b < large_group.small_size]
+
+    # Find large files in sset
+    move_to_large = [item for item in sset if item.size_b >= large_group.small_size]
+
+    # Report
+    need_fix = False
+    for name, files in [(group_name, ldup), (small_name, sdup)]:
+        if len(files) > 0:
+            need_fix = True
+            size = 0
+            size = reduce((lambda size, item: size + item.size_b), files, 0)
+            print(
+                "{0} ({1:.1f} GiB) duplicated files in group {2}".format(
+                    len(files), size / 2.0 ** 30, name
+                )
+            )
+            if show_files:
+                for item in files:
+                    print("  {0}/{1}".format(item.acq.name, item.name))
+                print("")
+    for src, desc, dest, files in [
+        (group_name, "small", small_name, move_to_small),
+        (small_name, "large", group_name, move_to_large),
+    ]:
+        if len(files) > 0:
+            need_fix = True
+            size = 0
+            size = reduce((lambda size, item: size + item.size_b), files, 0)
+            print(
+                "{0} ({1:.1f} GiB) {2} files in group {3} to move to group {4}".format(
+                    len(files), size / 2.0 ** 30, desc, src, dest
+                )
+            )
+            if show_files:
+                for item in files:
+                    print("  {0}/{1}".format(item.acq.name, item.name))
+                print("")
+
+    if fix and not need_fix:
+        print("Nothing to fix.")
+    elif fix and need_fix and (force or click.confirm("Do you want to proceed?")):
+        dtnow = datetime.datetime.now()
+        with db.proxy.atomic():
+            # These are the transfers
+            for files, src_group, dest_group in [
+                (move_to_small, large_group, small_group),
+                (move_to_large, small_group, large_group),
+            ]:
+                if len(files) > 0:
+                    # Extract the file_ids.  We do this here so we only have to do it once
+                    file_ids = [item.id for item in files]
+
+                    # loop over nodes.  As in much of alpenhorn, We assume there's only
+                    # one copy of a given file across all nodes of a storage group.
+                    for node in di.StorageNode.select().where(
+                        di.StorageNode.group == src_group
+                    ):
+                        update_copy_requests(
+                            di.ArchiveFileCopy.select().where(
+                                di.ArchiveFileCopy.node == node,
+                                di.ArchiveFileCopy.file_id << file_ids,
+                            ),
+                            dest_group,
+                            node,
+                            dtnow,
+                        )
+
+            # These are the duplicate deletions
+            for (files, group) in [(ldup, large_group), (sdup, small_group)]:
+                if len(files) > 0:
+                    file_ids = [item.id for item in files]
+
+                    n = 0
+                    # Loop over nodes
+                    for node in di.StorageNode.select().where(
+                        di.StorageNode.group == group
+                    ):
+                        n += (
+                            di.ArchiveFileCopy.update(wants_file="N")
+                            .where(
+                                di.ArchiveFileCopy.node == node,
+                                di.ArchiveFileCopy.file_id << file_ids,
+                            )
+                            .execute()
+                        )
+
+                    print(
+                        "Marked {} files for cleaning from group {}".format(
+                            n, group.name
+                        )
+                    )
+
+
+def update_copy_requests(copy, to_group, from_node, dtnow):
+    """Perform a batch of ArchiveFileCopyRequest updates and insertions.
+
+    Before calling this function, you should start a transaction!"""
+
+    # Get a list of all the file ids for the copies we should perform
+    files_ids = [c.file_id for c in copy]
+
+    # Get a list of all the file ids for exisiting requests
+    requests = di.ArchiveFileCopyRequest.select().where(
+        di.ArchiveFileCopyRequest.group_to == to_group,
+        di.ArchiveFileCopyRequest.node_from == from_node,
+    )
+    req_file_ids = [req.file_id for req in requests]
+
+    # Separate the files into ones that already have requests and ones that don't
+    files_in = [x for x in files_ids if x in req_file_ids]
+    files_out = [x for x in files_ids if x not in req_file_ids]
+
+    sys.stdout.write(
+        "Updating %i existing requests and inserting %i new ones for destination %s.\n"
+        % (len(files_in), len(files_out), to_group.name)
+    )
+
+    # Perform an update of all the existing copy requests
+    if len(files_in) > 0:
+        update = di.ArchiveFileCopyRequest.update(
+            completed=False,
+            cancelled=False,
+            timestamp=dtnow,
+            n_requests=di.ArchiveFileCopyRequest.n_requests + 1,
+        )
+
+        update = update.where(
+            di.ArchiveFileCopyRequest.file << files_in,
             di.ArchiveFileCopyRequest.group_to == to_group,
             di.ArchiveFileCopyRequest.node_from == from_node,
         )
-        req_file_ids = [req.file_id for req in requests]
+        update.execute()
 
-        # Separate the files into ones that already have requests and ones that don't
-        files_in = [x for x in files_ids if x in req_file_ids]
-        files_out = [x for x in files_ids if x not in req_file_ids]
+    # Insert any new requests
+    if len(files_out) > 0:
 
-        sys.stdout.write(
-            "Updating %i existing requests and inserting %i new ones.\n"
-            % (len(files_in), len(files_out))
-        )
+        # Construct a list of all the rows to insert
+        insert = [
+            {
+                "file": fid,
+                "node_from": from_node,
+                "nice": 0,
+                "group_to": to_group,
+                "completed": False,
+                "n_requests": 1,
+                "timestamp": dtnow,
+            }
+            for fid in files_out
+        ]
 
-        # Perform an update of all the existing copy requests
-        if len(files_in) > 0:
-            update = di.ArchiveFileCopyRequest.update(
-                nice=nice,
-                completed=False,
-                cancelled=False,
-                timestamp=dtnow,
-                n_requests=di.ArchiveFileCopyRequest.n_requests + 1,
-            )
-
-            update = update.where(
-                di.ArchiveFileCopyRequest.file << files_in,
-                di.ArchiveFileCopyRequest.group_to == to_group,
-                di.ArchiveFileCopyRequest.node_from == from_node,
-            )
-            update.execute()
-
-        # Insert any new requests
-        if len(files_out) > 0:
-
-            # Construct a list of all the rows to insert
-            insert = [
-                {
-                    "file": fid,
-                    "node_from": from_node,
-                    "nice": 0,
-                    "group_to": to_group,
-                    "completed": False,
-                    "n_requests": 1,
-                    "timestamp": dtnow,
-                }
-                for fid in files_out
-            ]
-
-            # Do a bulk insert of these new rows
-            di.ArchiveFileCopyRequest.insert_many(insert).execute()
+        # Do a bulk insert of these new rows
+        di.ArchiveFileCopyRequest.insert_many(insert).execute()
 
 
 @cli.command()
@@ -264,8 +403,7 @@ def sync(
     "--all", help="Show the status of all nodes, not just mounted ones.", is_flag=True
 )
 def status(all):
-    """Summarise the status of alpenhorn storage nodes.
-    """
+    """Summarise the status of alpenhorn storage nodes."""
 
     import tabulate
 
@@ -329,8 +467,7 @@ def status(all):
     help="Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.",
 )
 def verify(node_name, md5, fixdb, acq):
-    """Verify the archive on NODE against the database.
-    """
+    """Verify the archive on NODE against the database."""
 
     db.connect()
 
@@ -549,20 +686,8 @@ def clean(node_name, days, size, force, now, target, acq):
                 'Target group "%s" does not exist in the DB.' % target
             )
 
-        # First get the nodes at the destination...
-        nodes_at_target = di.StorageNode.select().where(
-            di.StorageNode.group == target_group
-        )
-
-        # Then use this to get a list of all files at the destination...
-        files_at_target = (
-            di.ArchiveFile.select()
-            .join(di.ArchiveFileCopy)
-            .where(
-                di.ArchiveFileCopy.node << nodes_at_target,
-                di.ArchiveFileCopy.has_file == "Y",
-            )
-        )
+        # Get a list of all files at the target
+        files_at_target = files_in_group(target_group)
 
         # Only match files that are also available at the target
         files = files.where(di.ArchiveFileCopy.file << files_at_target)
@@ -807,9 +932,8 @@ def format_transport(serial_num):
                 mounted = True
             else:
                 print(
-                    "%s is a mount point, but %s is already mounted there."(
-                        root, l.split()[0]
-                    )
+                    "%s is a mount point, but %s is already mounted there."
+                    % (root, l.split()[0])
                 )
     fp.close()
 
@@ -845,8 +969,7 @@ def format_transport(serial_num):
     "--address", help="address for remote access to this node.", type=str, default=None
 )
 def mount_transport(ctx, node, user, address):
-    """Mount a transport disk into the system and then make it available to alpenhorn.
-    """
+    """Mount a transport disk into the system and then make it available to alpenhorn."""
 
     mnt_point = "/mnt/%s" % node
 
@@ -863,8 +986,7 @@ def mount_transport(ctx, node, user, address):
 @click.pass_context
 @click.argument("node")
 def unmount_transport(ctx, node):
-    """Unmount a transport disk from the system.
-    """
+    """Unmount a transport disk from the system."""
 
     mnt_point = "/mnt/%s" % node
 
@@ -1083,6 +1205,35 @@ def import_files(node_name, verbose, acq, dry):
         for fn in not_acqs:
             print(fn)
         print()
+
+
+def files_in_group(group, include_small_files=True):
+    """A utility routine which takes a StorageGroup and returns a list of
+    files present in that group.
+
+    If include_small_files is false, an associated small-file group is
+    ignored."""
+
+    # First get the nodes at the destination...
+    nodes_in_group = di.StorageNode.select(di.StorageNode.id).where(
+        di.StorageNode.group == group
+    )
+
+    # Add nodes in the small-file group, if requested:
+    if include_small_files and group.small_group is not None:
+        nodes_in_group += di.StorageNode.select(di.StorageNode.id).where(
+            di.StorageNode.group == group.small_group
+        )
+
+    # Then use this to return a list of all files in the group
+    return (
+        di.ArchiveFile.select()
+        .join(di.ArchiveFileCopy)
+        .where(
+            di.ArchiveFileCopy.node << nodes_in_group,
+            di.ArchiveFileCopy.has_file == "Y",
+        )
+    )
 
 
 # A few utitly routines for dealing with filesystems

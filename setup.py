@@ -21,6 +21,7 @@ setup(
         "bitshuffle",
         "netifaces",
         "PyYAML",
+        "pytest",
         "configobj",
         "watchdog",
         "ConcurrentLogHandler",

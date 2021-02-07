@@ -67,8 +67,7 @@ def load_import_cache():
 
 
 def setup_observers(node_list):
-    """Setup the watchdogs to look for new files in the nodes.
-    """
+    """Setup the watchdogs to look for new files in the nodes."""
 
     global obs_list
 
@@ -118,8 +117,7 @@ def join_observers():
 
 
 def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
-    """Add an aquisition to the database.
-    """
+    """Add an aquisition to the database."""
     ts, inst, atype = di.util.parse_acq_name(name)
 
     # Is the acquisition already in the database?
@@ -326,8 +324,7 @@ def get_fileflaginputinfo_keywords_from_h5(path):
 
 
 def get_miscfile_data(path):
-    """Get metadata for a misc-type tarball by reading the METADATA.json file.
-    """
+    """Get metadata for a misc-type tarball by reading the METADATA.json file."""
 
     serial_number, data_type = di.util.parse_miscfile_name(os.path.basename(path))
     start_time = None

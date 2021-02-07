@@ -1,0 +1,56 @@
+name: alpenhorn-ci
+on:
+  pull_request:
+    branches:
+    - master
+  push:
+    branches:
+    - master
+
+jobs:
+
+  lint-code:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+
+    - name: Install black
+      run: pip install black
+
+    - name: Check code with black
+      run: black --check .
+
+  run-tests:
+
+    strategy:
+      matrix:
+        python-version: [2.7, 3.9]
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install apt dependencies
+      run: |
+        sudo apt-get install -y libopenmpi-dev libhdf5-serial-dev
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install pip dependencies
+      run: |
+        pip install future numpy cython pytest
+        pip install h5py --no-binary :all:
+        pip install git+https://github.com/kiyo-masui/bitshuffle.git
+        pip install -e .
+
+    - name: Run tests
+      run: pytest tests/

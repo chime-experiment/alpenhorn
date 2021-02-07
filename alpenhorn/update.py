@@ -148,16 +148,14 @@ def is_md5_hash(h):
 
 
 def command_available(cmd):
-    """Is this command available on the system.
-    """
+    """Is this command available on the system."""
     from distutils import spawn
 
     return spawn.find_executable(cmd) is not None
 
 
 def update_loop(host):
-    """Loop over nodes performing any updates needed.
-    """
+    """Loop over nodes performing any updates needed."""
     global done_transport_this_cycle
 
     while True:
@@ -601,8 +599,7 @@ def update_node_requests(node):
 
 
 def update_node(node):
-    """Update the status of the node, and process eligible transfers onto it.
-    """
+    """Update the status of the node, and process eligible transfers onto it."""
 
     # Check if this is an HPSS node, and if so call the special handler
     if is_hpss_node(node):
@@ -726,8 +723,7 @@ def _check_and_bundle_requests(requests, node, pull=False):
 
 
 def run_hpss_callbacks_from_file():
-    """Execute filesystem-based HPSS callbacks
-    """
+    """Execute filesystem-based HPSS callbacks"""
 
     # Do nothing if the HPSS script directory hasn't been defined
     if HPSS_SCRIPT_DIR is None:
@@ -763,8 +759,7 @@ def run_hpss_callbacks_from_file():
 
 
 def update_node_hpss_inbound(node):
-    """Process transfers into an HPSS node.
-    """
+    """Process transfers into an HPSS node."""
 
     if HPSS_SCRIPT_DIR is None:
         raise KeyError("ALPENHORN_HPSS_SCRIPT_DIR not found in environment.")
@@ -808,8 +803,7 @@ def update_node_hpss_inbound(node):
 
 
 def update_node_hpss_outbound(node):
-    """Process transfers out of an HPSS tape node.
-    """
+    """Process transfers out of an HPSS tape node."""
 
     # Do nothing if the HPSS script directory hasn't been defined
     if HPSS_SCRIPT_DIR is None:
