@@ -30,7 +30,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [2.7, 3.9]
+        python-version: [3.7, 3.9]
 
     runs-on: ubuntu-latest
     steps:
@@ -47,6 +47,7 @@ jobs:
 
     - name: Install pip dependencies
       run: |
+        pip install wheel
         pip install future numpy cython pytest
         pip install h5py --no-binary :all:
         pip install git+https://github.com/kiyo-masui/bitshuffle.git
