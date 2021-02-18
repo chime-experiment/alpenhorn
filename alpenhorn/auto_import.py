@@ -197,6 +197,51 @@ def get_acqcorrinfo_keywords_from_h5(path):
     f.close()
     return {"integration": integration, "nfreq": n_freq, "nprod": n_prod}
 
+def get_acqhfbinfo_keywords_from_h5(path):
+    f = h5py.File(path, "r")
+    try:
+        # This works on the 8-channel correlator.
+        n_freq = f["/"].attrs["n_freq"][0]
+        n_sub_freq = len(f["/index_map/subfreq"])
+        n_beam = len(f["/index_map/beam"])
+        integration = (
+            f["/"].attrs["acq.udp.spf"][0] * f["/"].attrs["fpga.int_period"][0]
+        )
+    except:
+        # For now, at least, on the GPU correlator, we need to find the integration
+        # time by hand. Find the median difference between timestamps.
+        try:
+            # Archive Version 2
+            version = f.attrs["archive_version"][0]
+            dt = np.array([])
+            t = f["/index_map/time"]
+            for i in range(1, len(t)):
+                dt = np.append(dt, float(t[i][1]) - float(t[i - 1][1]))
+            integration = np.median(dt)
+            n_freq = len(f["/index_map/freq"])
+            n_sub_freq = len(f["/index_map/subfreq"])
+            n_beam = len(f["/index_map/beam"])
+        except:
+            dt = np.array([])
+            t = f["timestamp"]
+            for i in range(1, len(t)):
+                ddt = (
+                    float(t[i][1])
+                    - float(t[i - 1][1])
+                    + (float(t[i][2]) - float(t[i - 1][2])) * 1e-6
+                )
+                if t[i][2] + 2e-5 < t[i - 1][2]:
+                    dt = np.append(dt, ddt + 1.0)
+                else:
+                    dt = np.append(dt, ddt)
+            integration = np.median(dt)
+            n_freq = f["/"].attrs["n_freq"][0]
+            n_sub_freq = len(f["/index_map/subfreq"])
+            n_beam = len(f["/index_map/beam"])
+
+    f.close()
+    return {"integration": integration, "nfreq": n_freq, "nsubfreq": n_sub_freq, "nbeam": n_beam}
+
 
 def get_acqhkinfo_keywords_from_h5(path):
     fullpath = os.path.join(path, di.util.fname_atmel)
@@ -223,6 +268,24 @@ def get_acqrawadcinfo_keywords_from_h5(acq_name):
 
 
 def get_filecorrinfo_keywords_from_h5(path):
+    f = h5py.File(path, "r")
+    try:
+        start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
+        finish_time = f["timestamp"][-1][1] + f["timestamp"][-1][2] * 1e-6
+    except:
+        start_time = f["/index_map/time"][0][1]
+        finish_time = f["/index_map/time"][-1][1]
+    chunk_number, freq_number = di.util.parse_corrfile_name(os.path.basename(path))
+    f.close()
+    return {
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "chunk_number": chunk_number,
+        "freq_number": freq_number,
+    }
+
+    
+def get_filehfbinfo_keywords_from_h5(path):
     f = h5py.File(path, "r")
     try:
         start_time = f["timestamp"][0][1] + f["timestamp"][0][2] * 1e-6
@@ -455,6 +518,22 @@ def _import_file(node, root, acq_name, file_name):
 
     # Make sure information about the acquisition exists in the DB.
     if atype == "corr" and ftype.name == "corr":
+        if not acq.corrinfos.count():
+            try:
+                di.CorrAcqInfo.create(
+                    acq=acq, **get_acqcorrinfo_keywords_from_h5(fullpath)
+                )
+                log.info(
+                    'Added information for correlator acquisition "%s" to '
+                    "DB." % acq_name
+                )
+            except:
+                log.warning(
+                    'Missing info for acquistion "%s": HDF5 datasets '
+                    "empty. Leaving fields NULL." % (acq_name)
+                )
+                di.CorrAcqInfo.create(acq=acq)
+    if atype == "hfb" and ftype.name == "hfb":
         if not acq.corrinfos.count():
             try:
                 di.CorrAcqInfo.create(
