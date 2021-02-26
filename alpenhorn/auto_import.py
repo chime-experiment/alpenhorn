@@ -533,14 +533,14 @@ def _import_file(node, root, acq_name, file_name):
                     "empty. Leaving fields NULL." % (acq_name)
                 )
                 di.CorrAcqInfo.create(acq=acq)
-    if atype == "hfb" and ftype.name == "hfb":
-        if not acq.corrinfos.count():
+    elif atype == "hfb" and ftype.name == "hfb":
+        if not acq.hfbinfos.count():
             try:
-                di.CorrAcqInfo.create(
-                    acq=acq, **get_acqcorrinfo_keywords_from_h5(fullpath)
+                di.HFBAcqInfo.create(
+                    acq=acq, **get_acqhfbinfo_keywords_from_h5(fullpath)
                 )
                 log.info(
-                    'Added information for correlator acquisition "%s" to '
+                    'Added information for HFB acquisition "%s" to '
                     "DB." % acq_name
                 )
             except:
@@ -548,7 +548,7 @@ def _import_file(node, root, acq_name, file_name):
                     'Missing info for acquistion "%s": HDF5 datasets '
                     "empty. Leaving fields NULL." % (acq_name)
                 )
-                di.CorrAcqInfo.create(acq=acq)
+                di.HFBAcqInfo.create(acq=acq)
     elif atype == "hk" and ftype.name == "hk":
         try:
             keywords = get_acqhkinfo_keywords_from_h5("%s/%s" % (root, acq_name))
@@ -643,6 +643,38 @@ def _import_file(node, root, acq_name, file_name):
             try:
                 i = file.corrinfos[0]
                 k = get_filecorrinfo_keywords_from_h5(fullpath)
+            except:
+                log.debug('Still missing info for file "%s/%s".')
+            else:
+                i.start_time = k["start_time"]
+                i.finish_time = k["finish_time"]
+                i.chunk_number = k["chunk_number"]
+                i.freq_number = k["freq_number"]
+                i.save()
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
+    elif ftype.name == "hfb":
+        # Add if (1) there is no corrinfo or (2) the corrinfo is missing.
+        if not file.hfbinfos.count():
+            try:
+                di.HFBFileInfo.create(
+                    file=file, **get_filehfbinfo_keywords_from_h5(fullpath)
+                )
+                log.info(
+                    'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
+                )
+            except:
+                if not file.hfbinfos.count():
+                    di.HFBFileInfo.create(file=file)
+                log.warning(
+                    'Missing info for file "%s/%s": HDF5 datasets '
+                    "empty or unreadable. Leaving fields NULL." % (acq_name, file_name)
+                )
+        elif not file.hfbinfos[0].start_time:
+            try:
+                i = file.hfbinfos[0]
+                k = get_filehfbinfo_keywords_from_h5(fullpath)
             except:
                 log.debug('Still missing info for file "%s/%s".')
             else:
