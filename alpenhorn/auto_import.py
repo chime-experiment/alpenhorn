@@ -293,7 +293,7 @@ def get_filehfbinfo_keywords_from_h5(path):
     except:
         start_time = f["/index_map/time"][0][1]
         finish_time = f["/index_map/time"][-1][1]
-    chunk_number, freq_number = di.util.parse_corrfile_name(os.path.basename(path))
+    chunk_number, freq_number = di.util.parse_hfbfile_name(os.path.basename(path))
     f.close()
     return {
         "start_time": start_time,
