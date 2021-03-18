@@ -14,6 +14,7 @@ import glob
 import datetime
 import time
 import socket
+import subprocess
 
 import click
 import peewee as pw
@@ -264,8 +265,7 @@ def sync(
     "--all", help="Show the status of all nodes, not just mounted ones.", is_flag=True
 )
 def status(all):
-    """Summarise the status of alpenhorn storage nodes.
-    """
+    """Summarise the status of alpenhorn storage nodes."""
 
     import tabulate
 
@@ -329,8 +329,7 @@ def status(all):
     help="Limit verification to specified acquisitions. Use repeated --acq flags to specify multiple acquisitions.",
 )
 def verify(node_name, md5, fixdb, acq):
-    """Verify the archive on NODE against the database.
-    """
+    """Verify the archive on NODE against the database."""
 
     db.connect()
 
@@ -845,8 +844,7 @@ def format_transport(serial_num):
     "--address", help="address for remote access to this node.", type=str, default=None
 )
 def mount_transport(ctx, node, user, address):
-    """Mount a transport disk into the system and then make it available to alpenhorn.
-    """
+    """Mount a transport disk into the system and then make it available to alpenhorn."""
 
     mnt_point = "/mnt/%s" % node
 
@@ -863,8 +861,7 @@ def mount_transport(ctx, node, user, address):
 @click.pass_context
 @click.argument("node")
 def unmount_transport(ctx, node):
-    """Unmount a transport disk from the system.
-    """
+    """Unmount a transport disk from the system."""
 
     mnt_point = "/mnt/%s" % node
 
@@ -1090,15 +1087,13 @@ MAX_E2LABEL_LEN = 16
 
 
 def get_e2label(dev):
-    pin, pout, perr = os.popen3("/sbin/e2label %s" % dev, "r")
-    pin.close()
-    res = pout.read().strip()
-    err = perr.read()
-    pout.close()
-    perr.close()
-    if not len(err) and len(res) < MAX_E2LABEL_LEN:
-        return res
-    return None
+    try:
+        return subprocess.check_output(
+            args=["/sbin/e2label", dev],
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return None
 
 
 def get_mount_device(path):
