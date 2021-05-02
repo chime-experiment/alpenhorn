@@ -185,6 +185,15 @@ def update_node_free_space(node):
     x = os.statvfs(node.root)
     node.avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
 
+    # Special case for cedar
+    if node.host == "cedar5" and node.name == "cedar_online":
+        ret, stdout, stderr = run_command(["/usr/bin/lfs", "quota", "-q", "-g",
+                "rpp-chime", "/project"])
+        lfs_quota = stdout.split()
+
+        # lfs quota reports values in kibibyte blocks
+        node.avail_gb = (int(lfs_quota[2]) - int(lfs_quota[1])) / 2 ** 20.0
+
     # Update the DB with the free space. Perform with an update query (rather
     # than save) to ensure we don't clobber changes made manually to the
     # database
