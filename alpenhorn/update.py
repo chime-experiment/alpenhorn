@@ -436,7 +436,7 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if command_available("bbcp"):
-                cmd = "bbcp -P 15 -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s" % (
+                cmd = "bbcp -f -z --port 4200 -W 4M -s 16 -e -E %md5= %s %s" % (
                     from_path,
                     to_path,
                 )
