@@ -784,7 +784,7 @@ def update_node_hpss_inbound(node):
     if len(requests_to_process) == 0:
         return
 
-    if len(queued_archive_jobs()) > 1:
+    if len(queued_archive_jobs()) > 0:
         log.info("Skipping HPSS inbound as queue full.")
         return
 
