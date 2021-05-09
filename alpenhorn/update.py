@@ -375,21 +375,6 @@ def update_node_requests(node):
             )
             continue
 
-        # Only proceed if the source file actually exists (and is not corrupted).
-        try:
-            di.ArchiveFileCopy.get(
-                di.ArchiveFileCopy.file == req.file,
-                di.ArchiveFileCopy.node == req.node_from,
-                di.ArchiveFileCopy.has_file == "Y",
-            )
-        except pw.DoesNotExist:
-            log.error(
-                "Skipping request for %s/%s since it is not available on "
-                'node "%s". [file_id=%i]'
-                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
-            )
-            continue
-
         # Only proceed if the destination file does not already exist.
         try:
             di.ArchiveFileCopy.get(
@@ -408,6 +393,21 @@ def update_node_requests(node):
             continue
         except pw.DoesNotExist:
             pass
+
+        # Only proceed if the source file actually exists (and is not corrupted).
+        try:
+            di.ArchiveFileCopy.get(
+                di.ArchiveFileCopy.file == req.file,
+                di.ArchiveFileCopy.node == req.node_from,
+                di.ArchiveFileCopy.has_file == "Y",
+            )
+        except pw.DoesNotExist:
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
+            continue
 
         # Check that there is enough space available.
         if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
@@ -670,20 +670,6 @@ def _check_and_bundle_requests(requests, node, pull=False):
             log.error("Source file is not on this host [request_id=%i]." % req.id)
             continue
 
-        # Check that there is actually a copy of the file at the source
-        filecopy_src = di.ArchiveFileCopy.select().where(
-            di.ArchiveFileCopy.file == req.file,
-            di.ArchiveFileCopy.node == req.node_from,
-            di.ArchiveFileCopy.has_file == "Y",
-        )
-        if not filecopy_src.exists():
-            log.error(
-                "Skipping request for %s/%s since it is not available on "
-                'node "%s". [file_id=%i]'
-                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
-            )
-            continue
-
         # Check if there is already a copy at the destination, and skip the request if there is
         filecopy_dst = di.ArchiveFileCopy.select().where(
             di.ArchiveFileCopy.file == req.file,
@@ -701,6 +687,20 @@ def _check_and_bundle_requests(requests, node, pull=False):
                 di.ArchiveFileCopyRequest.file == req.file,
                 di.ArchiveFileCopyRequest.group_to == node.group,
             ).execute()
+            continue
+
+        # Check that there is actually a copy of the file at the source
+        filecopy_src = di.ArchiveFileCopy.select().where(
+            di.ArchiveFileCopy.file == req.file,
+            di.ArchiveFileCopy.node == req.node_from,
+            di.ArchiveFileCopy.has_file == "Y",
+        )
+        if not filecopy_src.exists():
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
             continue
 
         # Ensure that we only attempt to transfer into HPSS online from an HPSS offline node
