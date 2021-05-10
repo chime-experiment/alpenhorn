@@ -28,7 +28,7 @@ db.connect(read_write=True)
 @click.group()
 def cli():
     """Call back commands for updating the database from a shell script after an
-    HPSS transfer. """
+    HPSS transfer."""
     pass
 
 
