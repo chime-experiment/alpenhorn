@@ -67,8 +67,7 @@ def load_import_cache():
 
 
 def setup_observers(node_list):
-    """Setup the watchdogs to look for new files in the nodes.
-    """
+    """Setup the watchdogs to look for new files in the nodes."""
 
     global obs_list
 
@@ -118,8 +117,7 @@ def join_observers():
 
 
 def add_acq(name, allow_new_inst=True, allow_new_atype=False, comment=None):
-    """Add an aquisition to the database.
-    """
+    """Add an aquisition to the database."""
     ts, inst, atype = di.util.parse_acq_name(name)
 
     # Is the acquisition already in the database?
@@ -197,6 +195,7 @@ def get_acqcorrinfo_keywords_from_h5(path):
     f.close()
     return {"integration": integration, "nfreq": n_freq, "nprod": n_prod}
 
+
 def get_acqhfbinfo_keywords_from_h5(path):
     f = h5py.File(path, "r")
     try:
@@ -240,7 +239,12 @@ def get_acqhfbinfo_keywords_from_h5(path):
             n_beam = len(f["/index_map/beam"])
 
     f.close()
-    return {"integration": integration, "nfreq": n_freq, "nsubfreq": n_sub_freq, "nbeam": n_beam}
+    return {
+        "integration": integration,
+        "nfreq": n_freq,
+        "nsubfreq": n_sub_freq,
+        "nbeam": n_beam,
+    }
 
 
 def get_acqhkinfo_keywords_from_h5(path):
@@ -284,7 +288,7 @@ def get_filecorrinfo_keywords_from_h5(path):
         "freq_number": freq_number,
     }
 
-    
+
 def get_filehfbinfo_keywords_from_h5(path):
     f = h5py.File(path, "r")
     try:
@@ -389,8 +393,7 @@ def get_fileflaginputinfo_keywords_from_h5(path):
 
 
 def get_miscfile_data(path):
-    """Get metadata for a misc-type tarball by reading the METADATA.json file.
-    """
+    """Get metadata for a misc-type tarball by reading the METADATA.json file."""
 
     serial_number, data_type = di.util.parse_miscfile_name(os.path.basename(path))
     start_time = None
@@ -540,8 +543,7 @@ def _import_file(node, root, acq_name, file_name):
                     acq=acq, **get_acqhfbinfo_keywords_from_h5(fullpath)
                 )
                 log.info(
-                    'Added information for HFB acquisition "%s" to '
-                    "DB." % acq_name
+                    'Added information for HFB acquisition "%s" to ' "DB." % acq_name
                 )
             except:
                 log.warning(

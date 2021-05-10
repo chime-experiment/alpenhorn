@@ -50,6 +50,5 @@ if log_path != "":
 
 
 def get_log():
-    """Get a logging instance.
-    """
+    """Get a logging instance."""
     return _log
