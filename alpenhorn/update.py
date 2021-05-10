@@ -188,10 +188,11 @@ def update_node_free_space(node):
     # Special case for cedar
     if node.host == "cedar5" and node.name == "cedar_online":
         # Strip non-numeric things
-        regexp = re.compile(r'[^\d ]+')
+        regexp = re.compile(r"[^\d ]+")
 
-        ret, stdout, stderr = run_command(["/usr/bin/lfs", "quota", "-q", "-g",
-                "rpp-chime", "/project"])
+        ret, stdout, stderr = run_command(
+            ["/usr/bin/lfs", "quota", "-q", "-g", "rpp-chime", "/project"]
+        )
         lfs_quota = regexp.sub("", stdout).split()
 
         # lfs quota reports values in kByte blocks
