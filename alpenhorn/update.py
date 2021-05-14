@@ -363,6 +363,9 @@ def update_node_requests(node):
     requests = requests.join(di.StorageNode).where(di.StorageNode.address != "HPSS")
 
     for req in requests:
+        # By default, if a copy fails, we mark the source file as suspect
+        # so it gets re-MD5'd on the source node.
+        check_source_on_err = True
 
         # Only continue if the node is actually mounted
         if not req.node_from.mounted:
@@ -485,6 +488,7 @@ def update_node_requests(node):
             # If we get here then we have no idea how to transfer the file...
             else:
                 log.warn("No commands available to complete this transfer.")
+                check_source_on_err = False
                 ret = -1
 
         # Okay, great we're just doing a local transfer.
@@ -502,6 +506,7 @@ def update_node_requests(node):
                 # confused.
                 if os.path.exists(link_path):
                     log.error("File %s already exists. Clean up manually." % link_path)
+                    check_source_on_err = False
                     ret = -1
                 else:
                     os.link(from_path, link_path)
@@ -522,16 +527,22 @@ def update_node_requests(node):
                     md5sum = req.file.md5sum if ret == 0 else None
                 else:
                     log.warn("No commands available to complete this transfer.")
+                    check_source_on_err = False
                     ret = -1
 
         # Check the return code...
         if ret:
-            # If the copy didn't work, then the remote file may be corrupted.
-            log.error("Rsync failed. Marking source file suspect.")
-            di.ArchiveFileCopy.update(has_file="M").where(
-                di.ArchiveFileCopy.file == req.file,
-                di.ArchiveFileCopy.node == req.node_from,
-            ).execute()
+            if check_source_on_err:
+                # If the copy didn't work, then the remote file may be corrupted.
+                log.error("Copy failed. Marking source file suspect.")
+                di.ArchiveFileCopy.update(has_file="M").where(
+                    di.ArchiveFileCopy.file == req.file,
+                    di.ArchiveFileCopy.node == req.node_from,
+                ).execute()
+            else:
+                # An error occurred that can't be due to the source
+                # being corrupt
+                log.error("Copy failed.")
             continue
         et = time.time()
 
