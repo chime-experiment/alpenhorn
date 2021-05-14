@@ -485,6 +485,11 @@ def update_node_requests(node):
                 # MD5 sum as the source file, so we can skip the check here.
                 md5sum = req.file.md5sum if ret == 0 else None
 
+                # If the rsync error occured during `mkstemp` this is a
+                # problem on the destination, not the source
+                if ret and "mkstemp" in stderr:
+                    check_source_on_err = False
+
             # If we get here then we have no idea how to transfer the file...
             else:
                 log.warn("No commands available to complete this transfer.")
