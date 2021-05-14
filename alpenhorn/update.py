@@ -185,6 +185,19 @@ def update_node_free_space(node):
     x = os.statvfs(node.root)
     node.avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
 
+    # Special case for cedar
+    if node.host == "cedar5" and node.name == "cedar_online":
+        # Strip non-numeric things
+        regexp = re.compile(r"[^\d ]+")
+
+        ret, stdout, stderr = run_command(
+            ["/usr/bin/lfs", "quota", "-q", "-g", "rpp-chime", "/project"]
+        )
+        lfs_quota = regexp.sub("", stdout).split()
+
+        # lfs quota reports values in kByte blocks
+        node.avail_gb = (int(lfs_quota[1]) - int(lfs_quota[0])) / 2 ** 20.0
+
     # Update the DB with the free space. Perform with an update query (rather
     # than save) to ensure we don't clobber changes made manually to the
     # database
@@ -350,6 +363,9 @@ def update_node_requests(node):
     requests = requests.join(di.StorageNode).where(di.StorageNode.address != "HPSS")
 
     for req in requests:
+        # By default, if a copy fails, we mark the source file as suspect
+        # so it gets re-MD5'd on the source node.
+        check_source_on_err = True
 
         # Only continue if the node is actually mounted
         if not req.node_from.mounted:
@@ -363,21 +379,6 @@ def update_node_requests(node):
                 "Skipping request for %s/%s from remote node [%s] onto local "
                 "transport disks"
                 % (req.file.acq.name, req.file.name, req.node_from.name)
-            )
-            continue
-
-        # Only proceed if the source file actually exists (and is not corrupted).
-        try:
-            di.ArchiveFileCopy.get(
-                di.ArchiveFileCopy.file == req.file,
-                di.ArchiveFileCopy.node == req.node_from,
-                di.ArchiveFileCopy.has_file == "Y",
-            )
-        except pw.DoesNotExist:
-            log.error(
-                "Skipping request for %s/%s since it is not available on "
-                'node "%s". [file_id=%i]'
-                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
             )
             continue
 
@@ -399,6 +400,21 @@ def update_node_requests(node):
             continue
         except pw.DoesNotExist:
             pass
+
+        # Only proceed if the source file actually exists (and is not corrupted).
+        try:
+            di.ArchiveFileCopy.get(
+                di.ArchiveFileCopy.file == req.file,
+                di.ArchiveFileCopy.node == req.node_from,
+                di.ArchiveFileCopy.has_file == "Y",
+            )
+        except pw.DoesNotExist:
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
+            continue
 
         # Check that there is enough space available.
         if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
@@ -436,7 +452,7 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if command_available("bbcp"):
-                cmd = "bbcp -P 15 -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s" % (
+                cmd = "bbcp -f -z --port 4200 -W 4M -s 16 -e -E %md5= %s %s" % (
                     from_path,
                     to_path,
                 )
@@ -469,9 +485,16 @@ def update_node_requests(node):
                 # MD5 sum as the source file, so we can skip the check here.
                 md5sum = req.file.md5sum if ret == 0 else None
 
+                # If the rsync error occured during `mkstemp` this is a
+                # problem on the destination, not the source
+                if ret and "mkstemp" in stderr:
+                    log.warn('rsync file creation failed on "{0}"'.format(node.name))
+                    check_source_on_err = False
+
             # If we get here then we have no idea how to transfer the file...
             else:
                 log.warn("No commands available to complete this transfer.")
+                check_source_on_err = False
                 ret = -1
 
         # Okay, great we're just doing a local transfer.
@@ -489,6 +512,7 @@ def update_node_requests(node):
                 # confused.
                 if os.path.exists(link_path):
                     log.error("File %s already exists. Clean up manually." % link_path)
+                    check_source_on_err = False
                     ret = -1
                 else:
                     os.link(from_path, link_path)
@@ -509,16 +533,22 @@ def update_node_requests(node):
                     md5sum = req.file.md5sum if ret == 0 else None
                 else:
                     log.warn("No commands available to complete this transfer.")
+                    check_source_on_err = False
                     ret = -1
 
         # Check the return code...
         if ret:
-            # If the copy didn't work, then the remote file may be corrupted.
-            log.error("Rsync failed. Marking source file suspect.")
-            di.ArchiveFileCopy.update(has_file="M").where(
-                di.ArchiveFileCopy.file == req.file,
-                di.ArchiveFileCopy.node == req.node_from,
-            ).execute()
+            if check_source_on_err:
+                # If the copy didn't work, then the remote file may be corrupted.
+                log.error("Copy failed. Marking source file suspect.")
+                di.ArchiveFileCopy.update(has_file="M").where(
+                    di.ArchiveFileCopy.file == req.file,
+                    di.ArchiveFileCopy.node == req.node_from,
+                ).execute()
+            else:
+                # An error occurred that can't be due to the source
+                # being corrupt
+                log.error("Copy failed.")
             continue
         et = time.time()
 
@@ -661,20 +691,6 @@ def _check_and_bundle_requests(requests, node, pull=False):
             log.error("Source file is not on this host [request_id=%i]." % req.id)
             continue
 
-        # Check that there is actually a copy of the file at the source
-        filecopy_src = di.ArchiveFileCopy.select().where(
-            di.ArchiveFileCopy.file == req.file,
-            di.ArchiveFileCopy.node == req.node_from,
-            di.ArchiveFileCopy.has_file == "Y",
-        )
-        if not filecopy_src.exists():
-            log.error(
-                "Skipping request for %s/%s since it is not available on "
-                'node "%s". [file_id=%i]'
-                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
-            )
-            continue
-
         # Check if there is already a copy at the destination, and skip the request if there is
         filecopy_dst = di.ArchiveFileCopy.select().where(
             di.ArchiveFileCopy.file == req.file,
@@ -692,6 +708,20 @@ def _check_and_bundle_requests(requests, node, pull=False):
                 di.ArchiveFileCopyRequest.file == req.file,
                 di.ArchiveFileCopyRequest.group_to == node.group,
             ).execute()
+            continue
+
+        # Check that there is actually a copy of the file at the source
+        filecopy_src = di.ArchiveFileCopy.select().where(
+            di.ArchiveFileCopy.file == req.file,
+            di.ArchiveFileCopy.node == req.node_from,
+            di.ArchiveFileCopy.has_file == "Y",
+        )
+        if not filecopy_src.exists():
+            log.error(
+                "Skipping request for %s/%s since it is not available on "
+                'node "%s". [file_id=%i]'
+                % (req.file.acq.name, req.file.name, req.node_from.name, req.file.id)
+            )
             continue
 
         # Ensure that we only attempt to transfer into HPSS online from an HPSS offline node
@@ -784,7 +814,7 @@ def update_node_hpss_inbound(node):
     if len(requests_to_process) == 0:
         return
 
-    if len(queued_archive_jobs()) > 1:
+    if len(queued_archive_jobs()) > 0:
         log.info("Skipping HPSS inbound as queue full.")
         return
 
