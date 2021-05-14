@@ -488,6 +488,7 @@ def update_node_requests(node):
                 # If the rsync error occured during `mkstemp` this is a
                 # problem on the destination, not the source
                 if ret and "mkstemp" in stderr:
+                    log.warn('rsync file creation failed on "{0}"'.format(node.name))
                     check_source_on_err = False
 
             # If we get here then we have no idea how to transfer the file...
