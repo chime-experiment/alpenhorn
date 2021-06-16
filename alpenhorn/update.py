@@ -181,22 +181,39 @@ def update_loop(host):
 def update_node_free_space(node):
     """Calculate the free space on the node and update the database with it."""
 
-    # Check with the OS how much free space there is
-    x = os.statvfs(node.root)
-    node.avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
-
     # Special case for cedar
-    if node.host == "cedar5" and node.name == "cedar_online":
+    if node.host == "cedar5" and (
+        node.name == "cedar_online" or node.name == "cedar_nearline"
+    ):
+        import re
+
         # Strip non-numeric things
-        regexp = re.compile(r"[^\d ]+")
+        regexp = re.compile(b"[^\d ]+")
 
         ret, stdout, stderr = run_command(
-            ["/usr/bin/lfs", "quota", "-q", "-g", "rpp-chime", "/project"]
+            [
+                "/usr/bin/lfs",
+                "quota",
+                "-q",
+                "-g",
+                "rpp-chime",
+                "/nearline" if node.name == "cedar_nearline" else "/project",
+            ]
         )
-        lfs_quota = regexp.sub("", stdout).split()
+        lfs_quota = regexp.sub(b"", stdout).split()
+
+        # The quota for nearline is fixed at 300 quota-TB
+        if node.name == "cedar_nearline":
+            quota = 300000000000  # 300 billion 1024-byte blocks
+        else:
+            quota = int(lfs_quota[1])
 
         # lfs quota reports values in kByte blocks
-        node.avail_gb = (int(lfs_quota[1]) - int(lfs_quota[0])) / 2 ** 20.0
+        node.avail_gb = (quota - int(lfs_quota[0])) / 2 ** 20.0
+    else:
+        # Check with the OS how much free space there is
+        x = os.statvfs(node.root)
+        node.avail_gb = float(x.f_bavail) * x.f_bsize / 2 ** 30.0
 
     # Update the DB with the free space. Perform with an update query (rather
     # than save) to ensure we don't clobber changes made manually to the
@@ -489,6 +506,13 @@ def update_node_requests(node):
                 # problem on the destination, not the source
                 if ret and "mkstemp" in stderr:
                     log.warn('rsync file creation failed on "{0}"'.format(node.name))
+                    check_source_on_err = False
+                elif "write failed on" in stderr:
+                    log.warn(
+                        'rsync failed to write to "{0}": {1}'.format(
+                            node.name, stderr[stderr.rfind(":") + 2 :].strip()
+                        )
+                    )
                     check_source_on_err = False
 
             # If we get here then we have no idea how to transfer the file...
