@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# This script gets run inside a screen.  It sets up the alpehornd
+# daemon's environment and then replaces itself with the daemon
+
+# This is the daemon's running directory.  
+RUNDIR=${HOME}/alpenspool
+cd ${RUNDIR}
+
+# Alpenhorn environment
+export ALPENHORN_LOG_FILE=${RUNDIR}/alpenhornd.log
+export ALPENHORN_IMPORT_RECORD=${RUNDIR}/import_record.dat
+
+# By default, give the group (rpp-chime) read access and everyone
+# else no access
+umask 027
+
+# Load the cedar environment
+module use /project/rpp-chime/chime/chime_env/modules/modulefiles/
+module load chime/python/2021.03
+
+# replace ourselves with the daemon
+exec ${HOME}/.local/bin/alpenhornd
+
+# shouldn't get here
+>2 echo "$0: failed to exec alpenhornd!"
+exit 1

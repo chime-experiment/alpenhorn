@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# This script runs the alpenhornd daemon in a detached screen.
+# If the first argument passed to this script is the word "respawn"
+# then the script will first try to kill an alpenhornd that is
+# running by killing the screen session if running.  (All other
+# arguments to this script are ignored.
+
+# If the first argument is "respawn", then first kill a
+# running alpenhornd screen
+if [ "x$1" = "xrespawn" ]; then
+  echo "$0: Killing alpenhornd (if running)"
+  screen -S alpenhornd -X quit
+  # wait for termination
+  sleep 5
+fi
+
+# this tests whether a screen called "alpenhornd" is running
+if ! screen -S alpenhornd -Q select . &>/dev/null
+then
+  # spawn a new detached screen using the alpenstart inner
+  # script.  sg ensure's we're using the correct group
+  echo "$0: starting alpenhornd in a screen"
+  screen -d -m -S alpenhornd /usr/bin/sg rpp-chime ${HOME}/bin/alpenstart
+else
+  echo "$0: alpenhornd already running"
+fi
