@@ -384,8 +384,8 @@ def update_node_requests(node):
         # so it gets re-MD5'd on the source node.
         check_source_on_err = True
 
-        # Only continue if the node is actually mounted
-        if not req.node_from.mounted:
+        # Only continue if the node is actually active
+        if not req.node_from.active:
             continue
 
         # For transport disks we should only copy onto the transport
@@ -661,8 +661,8 @@ def update_node(node):
         return
 
     # Make sure this node is usable.
-    if not node.mounted:
-        log.debug('Skipping unmounted node "%s".' % node.name)
+    if not node.active:
+        log.debug('Skipping deactivated node "%s".' % node.name)
         return
     if node.suspect:
         log.debug('Skipping suspected node "%s".' % node.name)

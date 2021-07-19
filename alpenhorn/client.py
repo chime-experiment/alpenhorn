@@ -262,7 +262,7 @@ def sync(
 
 @cli.command()
 @click.option(
-    "--all", help="Show the status of all nodes, not just mounted ones.", is_flag=True
+    "--all", help="Show the status of all nodes, not just active ones.", is_flag=True
 )
 def status(all):
     """Summarise the status of alpenhorn storage nodes."""
@@ -291,7 +291,7 @@ def status(all):
     )
 
     if not all:
-        nodes = nodes.where(di.StorageNode.mounted)
+        nodes = nodes.where(di.StorageNode.active)
 
     # Totals for the whole archive
     tot = di.ArchiveFile.select(
@@ -692,8 +692,8 @@ def clean(node_name, days, size, force, now, target, acq):
     type=str,
     default=None,
 )
-def mounted(host):
-    """list the nodes mounted on this, or another specified, machine"""
+def active(host):
+    """list the nodes active on this, or another specified, machine"""
 
     db.connect()
 
@@ -701,7 +701,7 @@ def mounted(host):
         host = socket.gethostname().split(".")[0]
     zero = True
     for node in di.StorageNode.select().where(
-        di.StorageNode.host == host, di.StorageNode.mounted == True
+        di.StorageNode.host == host, di.StorageNode.active == True
     ):
         n_file = (
             di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.node == node).count()
@@ -709,7 +709,7 @@ def mounted(host):
         print("%-25s %-30s %5d files" % (node.name, node.root, n_file))
         zero = False
     if zero:
-        print("No nodes are mounted on host %s." % host)
+        print("No nodes are active on host %s." % host)
 
 
 @cli.command()
@@ -793,9 +793,9 @@ def format_transport(serial_num):
         print("Creating mount point %s." % root)
         os.mkdir(root)
 
-    # Check to see if the disc is mounted.
+    # Check to see if the disc is active.
     fp = os.popen("df")
-    mounted = False
+    active = False
     dev_part_abs = os.path.realpath(dev_part)
     while 1:
         l = fp.readline()
@@ -803,10 +803,10 @@ def format_transport(serial_num):
             break
         if l.find(root) > 0:
             if l[: len(dev_part)] == dev or l[: len(dev_part_abs)] == dev_part_abs:
-                mounted = True
+                active = True
             else:
                 print(
-                    "%s is a mount point, but %s is already mounted there."(
+                    "%s is a mount point, but %s is already active there."(
                         root, l.split()[0]
                     )
                 )
@@ -833,7 +833,7 @@ def format_transport(serial_num):
 
         print("Successfully created storage node.")
 
-    print("Node created but not mounted. Run alpenhorn mount_transport for that.")
+    print("Node created but not active. Run alpenhorn mount_transport for that.")
 
 
 @cli.command()
@@ -895,8 +895,8 @@ def mount(name, path, user, address, hostname):
     except pw.DoesNotExist:
         print('Storage node "%s" does not exist. I quit.' % name)
 
-    if node.mounted:
-        print('Node "%s" is already mounted.' % name)
+    if node.active:
+        print('Node "%s" is already active.' % name)
         return
 
     # Set the default hostname if required
@@ -907,7 +907,7 @@ def mount(name, path, user, address, hostname):
     # Set the parameters of this node
     node.username = user
     node.address = address
-    node.mounted = True
+    node.active = True
     node.host = hostname
 
     if path is not None:
@@ -915,7 +915,7 @@ def mount(name, path, user, address, hostname):
 
     node.save()
 
-    print('Successfully mounted "%s".' % name)
+    print('Successfully activated "%s".' % name)
 
 
 @cli.command()
@@ -945,12 +945,12 @@ def unmount(root_or_name):
             )
             exit()
 
-    if not node.mounted:
-        print("There is no node mounted there any more.")
+    if not node.active:
+        print("There is no node active there any more.")
     else:
-        node.mounted = False
+        node.active = False
         node.save()
-        print("Node successfully unmounted.")
+        print("Node successfully deactivated.")
 
 
 @cli.command()

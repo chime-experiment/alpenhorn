@@ -44,7 +44,7 @@ def cli():
     # Get the list of nodes currently mounted
     node_list = list(
         di.StorageNode.select().where(
-            di.StorageNode.host == host, di.StorageNode.mounted
+            di.StorageNode.host == host, di.StorageNode.active
         )
     )
 
