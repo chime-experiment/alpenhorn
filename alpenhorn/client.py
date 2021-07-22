@@ -884,8 +884,8 @@ def unmount_transport(ctx, node):
     type=str,
     default=None,
 )
-def mount(name, path, user, address, hostname):
-    """Interactive routine for mounting a storage node located at ROOT."""
+def activate(name, path, user, address, hostname):
+    """Interactive routine for activating a storage node located at ROOT."""
 
     # We need to write to the database.
     db.connect(read_write=True)
