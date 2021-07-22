@@ -711,6 +711,7 @@ def active(host):
     if zero:
         print("No nodes are active on host %s." % host)
 
+
 @cli.command()
 @click.option(
     "--host",
@@ -721,8 +722,9 @@ def active(host):
 )
 def mounted(host):
     """Legacy alias to list the nodes active on this, or another specified, machine"""
-    
+
     active(host)
+
 
 @cli.command()
 @click.argument("serial_num")
@@ -929,6 +931,7 @@ def activate(name, path, user, address, hostname):
 
     print('Successfully activated "%s".' % name)
 
+
 @cli.command()
 @click.argument("name")
 @click.option("--path", help="Root path for this node", type=str, default=None)
@@ -946,7 +949,7 @@ def mount(name, path, user, address, hostname):
     """Legacy alias for activating a storage node located at ROOT."""
 
     activate(name, path, user, address, hostname)
-    
+
 
 @cli.command()
 @click.argument("root_or_name")
