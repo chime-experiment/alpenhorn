@@ -993,6 +993,7 @@ def unmount(root_or_name):
 
     deactivate(root_or_name)
 
+
 @cli.command()
 @click.argument("node_name", metavar="NODE")
 @click.option("-v", "--verbose", count=True)
