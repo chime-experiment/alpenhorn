@@ -953,8 +953,8 @@ def mount(name, path, user, address, hostname):
 
 @cli.command()
 @click.argument("root_or_name")
-def unmount(root_or_name):
-    """Unmount a storage node with location or named ROOT_OR_NAME."""
+def deactivate(root_or_name):
+    """Deactivate a storage node with location or named ROOT_OR_NAME."""
 
     # We need to write to the database.
     db.connect(read_write=True)
@@ -985,6 +985,13 @@ def unmount(root_or_name):
         node.save()
         print("Node successfully deactivated.")
 
+
+@cli.command()
+@click.argument("root_or_name")
+def unmount(root_or_name):
+    """Legacy alias for deactivating a storage node with location or named ROOT_OR_NAME."""
+
+    deactivate(root_or_name)
 
 @cli.command()
 @click.argument("node_name", metavar="NODE")
