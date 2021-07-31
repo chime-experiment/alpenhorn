@@ -525,8 +525,8 @@ def update_node_requests(node):
                     ["rsync", "--compress"]
                     + RSYNC_OPTS
                     + [
-                        '--rsync-path=ionice -c2 -n4 rsync',
-                        '--rsh=ssh -q',
+                        "--rsync-path=ionice -c2 -n4 rsync",
+                        "--rsh=ssh -q",
                         from_path,
                         to_path,
                     ]
