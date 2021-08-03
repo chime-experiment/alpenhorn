@@ -29,9 +29,16 @@ log = logger.get_log()
 max_time_per_node_operation = 300  # Don't let node operations hog time.
 min_loop_time = 60  # Main loop at most every 60 seconds.
 
-RSYNC_OPTS = (
-    "--quiet --times --protect-args --perms --group --owner " + "--copy-links --sparse"
-)
+RSYNC_OPTS = [
+    "--quiet",
+    "--times",
+    "--protect-args",
+    "--perms",
+    "--group",
+    "--owner",
+    "--copy-links",
+    "--sparse",
+]
 
 # Globals.
 done_transport_this_cycle = False
@@ -71,7 +78,11 @@ def run_command(cmd, **kwargs):
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
 
-    return retval, stdout_val, stderr_val
+    return (
+        retval,
+        stdout_val.decode(errors="replace"),
+        stderr_val.decode(errors="replace"),
+    )
 
 
 def pbs_jobs():
@@ -91,7 +102,7 @@ def pbs_jobs():
 
     from xml.dom import minidom
 
-    ret, out, err = run_command("qstat -x".split())
+    ret, out, err = run_command(["qstat", "-x"])
 
     if len(out) == 0:
         return []
@@ -113,7 +124,7 @@ def slurm_jobs():
 
     user = getpass.getuser()
 
-    ret, out, err = run_command(("squeue -o %%all -u %s" % user).split())
+    ret, out, err = run_command(["squeue", "-o", "%%all", "-u", user])
     lines = out.split("\n")
     headers = lines[0].split("|")
 
@@ -188,7 +199,7 @@ def update_node_free_space(node):
         import re
 
         # Strip non-numeric things
-        regexp = re.compile(b"[^\d ]+")
+        regexp = re.compile("[^\d ]+")
 
         ret, stdout, stderr = run_command(
             [
@@ -200,7 +211,7 @@ def update_node_free_space(node):
                 "/nearline" if node.name == "cedar_nearline" else "/project",
             ]
         )
-        lfs_quota = regexp.sub(b"", stdout).split()
+        lfs_quota = regexp.sub("", stdout).split()
 
         # The quota for nearline is fixed at 300 quota-TB
         if node.name == "cedar_nearline":
@@ -380,6 +391,9 @@ def update_node_requests(node):
     requests = requests.join(di.StorageNode).where(di.StorageNode.address != "HPSS")
 
     for req in requests:
+        if time.time() - start_time > max_time_per_node_operation:
+            break  # Don't hog all the time.
+
         # By default, if a copy fails, we mark the source file as suspect
         # so it gets re-MD5'd on the source node.
         check_source_on_err = True
@@ -459,6 +473,9 @@ def update_node_requests(node):
         log.info('Transferring file "%s/%s".' % (req.file.acq.name, req.file.name))
         st = time.time()
 
+        # For the potential error message later
+        stderr = None
+
         # Attempt to transfer the file. Each of the methods below needs to set a
         # return code `ret` and give an `md5sum` of the transferred file.
 
@@ -469,11 +486,25 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if command_available("bbcp"):
-                cmd = "bbcp -f -z --port 4200 -W 4M -s 16 -e -E %md5= %s %s" % (
-                    from_path,
-                    to_path,
+                ret, stdout, stderr = run_command(
+                    [
+                        "bbcp",
+                        "-V",
+                        "-f",
+                        "-z",
+                        "--port",
+                        "4200",
+                        "-W",
+                        "4M",
+                        "-s",
+                        "16",
+                        "-e",
+                        "-E",
+                        "%md5=",
+                        from_path,
+                        to_path,
+                    ]
                 )
-                ret, stdout, stderr = run_command(cmd.split())
 
                 # Attempt to parse STDERR for the md5 hash
                 if ret == 0:
@@ -490,12 +521,16 @@ def update_node_requests(node):
 
             # Next try rsync over ssh.
             elif command_available("rsync"):
-                cmd = (
-                    "rsync --compress {0} "
-                    + '--rsync-path="ionice -c2 -n4 rsync" '
-                    + '--rsh="ssh -q" {1} {2}'
-                ).format(RSYNC_OPTS, from_path, to_path)
-                ret, stdout, stderr = run_command(cmd.split())
+                ret, stdout, stderr = run_command(
+                    ["rsync", "--compress"]
+                    + RSYNC_OPTS
+                    + [
+                        "--rsync-path=ionice -c2 -n4 rsync",
+                        "--rsh=ssh -q",
+                        from_path,
+                        to_path,
+                    ]
+                )
 
                 # rsync v3+ already does a whole-file MD5 sum while
                 # transferring and guarantees the written file has the same
@@ -548,13 +583,29 @@ def update_node_requests(node):
             # If we couldn't just link the file, try copying it with rsync.
             except OSError:
                 if command_available("rsync"):
-                    cmd = "rsync %s %s %s" % (RSYNC_OPTS, from_path, to_path)
-                    ret, stdout, stderr = run_command(cmd.split())
+                    ret, stdout, stderr = run_command(
+                        ["rsync"] + RSYNC_OPTS + [from_path, to_path]
+                    )
 
                     # rsync v3+ already does a whole-file MD5 sum while
                     # transferring and guarantees the written file has the same
                     # MD5 sum as the source file, so we can skip the check here.
                     md5sum = req.file.md5sum if ret == 0 else None
+
+                    # If the rsync error occured during `mkstemp` this is a
+                    # problem on the destination, not the source
+                    if ret and "mkstemp" in stderr:
+                        log.warn(
+                            'rsync file creation failed on "{0}"'.format(node.name)
+                        )
+                        check_source_on_err = False
+                    elif "write failed on" in stderr:
+                        log.warn(
+                            'rsync failed to write to "{0}": {1}'.format(
+                                node.name, stderr[stderr.rfind(":") + 2 :].strip()
+                            )
+                        )
+                        check_source_on_err = False
                 else:
                     log.warn("No commands available to complete this transfer.")
                     check_source_on_err = False
@@ -564,7 +615,11 @@ def update_node_requests(node):
         if ret:
             if check_source_on_err:
                 # If the copy didn't work, then the remote file may be corrupted.
-                log.error("Copy failed. Marking source file suspect.")
+                log.error(
+                    "Copy failed: {0}. Marking source file suspect.".format(
+                        stderr if stderr is not None else "Unspecified error."
+                    )
+                )
                 di.ArchiveFileCopy.update(has_file="M").where(
                     di.ArchiveFileCopy.file == req.file,
                     di.ArchiveFileCopy.node == req.node_from,
@@ -647,9 +702,6 @@ def update_node_requests(node):
                 di.ArchiveFileCopy.file == req.file,
                 di.ArchiveFileCopy.node == req.node_from,
             ).execute()
-
-        if time.time() - start_time > max_time_per_node_operation:
-            break  # Don't hog all the time.
 
 
 def update_node(node):
