@@ -23,7 +23,7 @@ setup(
         "PyYAML",
         "configobj",
         "watchdog",
-        "ConcurrentLogHandler",
+        "concurrent-log-handler",
         "Click",
     ],
     entry_points="""
