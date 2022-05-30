@@ -43,7 +43,7 @@ if "ALPENHORN_LOG_FILE" in os.environ:
 
 # If log_path is set, set up as log handler
 if log_path != "":
-    log_file = RFHandler(log_path, maxBytes=(2 ** 22), backupCount=100)
+    log_file = RFHandler(log_path, maxBytes=(2**22), backupCount=100)
     log_file.setLevel(logging.INFO)
     log_file.setFormatter(log_fmt)
     _log.addHandler(log_file)
