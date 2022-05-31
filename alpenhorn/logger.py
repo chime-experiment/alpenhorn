@@ -14,12 +14,12 @@ import os
 
 # Use the concurrent logging file handler if we can
 try:
-    from cloghandler import ConcurrentRotatingFileHandler as RFHandler
+    from concurrent_log_handler import ConcurrentRotatingFileHandler as RFHandler
 except ImportError:
     # Next 2 lines are optional:  issue a warning to the user
     from warnings import warn
 
-    warn("ConcurrentLogHandler package not installed.  Using builtin log handler")
+    warn("concurrent-log-handler package not installed.  Using builtin log handler")
     from logging.handlers import RotatingFileHandler as RFHandler
 
 # Set up logger.
@@ -43,7 +43,7 @@ if "ALPENHORN_LOG_FILE" in os.environ:
 
 # If log_path is set, set up as log handler
 if log_path != "":
-    log_file = RFHandler(log_path, maxBytes=(2 ** 22), backupCount=100)
+    log_file = RFHandler(log_path, maxBytes=(2**22), backupCount=100)
     log_file.setLevel(logging.INFO)
     log_file.setFormatter(log_fmt)
     _log.addHandler(log_file)

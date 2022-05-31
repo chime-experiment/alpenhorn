@@ -303,7 +303,7 @@ def status(all):
         [
             node[0],
             int(node[1]),
-            int(node[2]) / 2 ** 40.0,
+            int(node[2]) / 2**40.0,
             100.0 * int(node[1]) / int(tot[0]),
             100.0 * int(node[2]) / int(tot[1]),
             "%s:%s" % (node[3], node[4]),
@@ -597,7 +597,7 @@ def clean(node_name, days, size, force, now, target, acq):
                     .scalar()
                 )
 
-                size_gb = int(size_bytes) / 2 ** 30.0
+                size_gb = int(size_bytes) / 2**30.0
 
                 print(
                     "Cleaning up %i %s files (%.1f GB) from %s "
@@ -610,7 +610,7 @@ def clean(node_name, days, size, force, now, target, acq):
     elif size is not None:
 
         # Convert to bytes
-        size *= 2 ** 30
+        size *= 2**30
 
         # Iterate though the file list until we've found enough files
         marked_size = 0
@@ -633,7 +633,7 @@ def clean(node_name, days, size, force, now, target, acq):
         if count > 0:
             print(
                 "Cleaning up %i files (%.1f GB) from %s "
-                % (count, marked_size / 2 ** 30, node_name)
+                % (count, marked_size / 2**30, node_name)
             )
         else:
             print(
