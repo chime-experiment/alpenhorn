@@ -28,9 +28,9 @@ setup(
     ],
     entry_points="""
         [console_scripts]
-        alpenhorn=alpenhorn.client:cli
-        alpenhornd=alpenhorn.service:cli
-        alpenhorn_hpss=alpenhorn.hpss_callback:cli
+        alpenhorn1=alpenhorn.client:cli
+        alpenhorn1d=alpenhorn.service:cli
+        alpenhorn1_hpss=alpenhorn.hpss_callback:cli
     """,
     scripts=["scripts/alpenhorn_ensure_running.sh"],
     # metadata for upload to PyPI
