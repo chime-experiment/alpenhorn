@@ -12,10 +12,10 @@ import socket
 
 import click
 
-from alpenhorn import logger
+from alpenhorn1 import logger
 import chimedb.core as db
 import chimedb.data_index as di
-from alpenhorn import update, auto_import
+from alpenhorn1 import update, auto_import
 
 log = logger.get_log()
 

@@ -8,7 +8,7 @@ from future.builtins.disabled import *  # noqa  pylint: disable=W0401, W0614
 from setuptools import setup, find_packages
 
 setup(
-    name="alpenhorn",
+    name="alpenhorn1",
     version=0.4,
     packages=find_packages(),
     install_requires=[
