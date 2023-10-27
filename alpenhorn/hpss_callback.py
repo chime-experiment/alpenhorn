@@ -82,7 +82,6 @@ def push_success(file_id, node_id):
 
     # Update the FileCopy (if exists), or insert a new FileCopy
     try:
-
         fcopy = (
             di.ArchiveFileCopy.select()
             .where(di.ArchiveFileCopy.file == afile, di.ArchiveFileCopy.node == node)
@@ -117,7 +116,6 @@ def pull_success(file_id, node_id):
 
     # Update the FileCopy (if exists), or insert a new FileCopy
     try:
-
         fcopy = (
             di.ArchiveFileCopy.select()
             .where(di.ArchiveFileCopy.file == afile, di.ArchiveFileCopy.node == node)

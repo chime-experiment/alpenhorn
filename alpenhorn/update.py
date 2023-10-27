@@ -292,7 +292,6 @@ def update_node_delete(node):
     # Process candidates for deletion
     del_count = 0  # Counter for no. of deletions (limits no. per node update)
     for fcopy in del_files.order_by(di.ArchiveFileCopy.id):
-
         # Limit number of deletions to 500 per main loop iteration.
         if del_count >= 500:
             break
@@ -312,7 +311,6 @@ def update_node_delete(node):
 
         # If at least two other copies we can delete the file.
         if ncopies >= 2:
-
             # Use transaction such that errors thrown in the os.remove do not leave
             # the database inconsistent.
             with db.proxy.transaction():
@@ -481,7 +479,6 @@ def update_node_requests(node):
 
         # First we need to check if we are copying over the network
         if req.node_from.host != node.host:
-
             # First try bbcp which is a fast multistream transfer tool. bbcp can
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
@@ -558,7 +555,6 @@ def update_node_requests(node):
 
         # Okay, great we're just doing a local transfer.
         else:
-
             # First try to just hard link the file. This will only work if we
             # are on the same filesystem. As there's no actual copying it's
             # probably unecessary to calculate the md5 check sum, so we'll just
@@ -761,7 +757,6 @@ def _check_and_bundle_requests(requests, node, pull=False):
     # Construct list of requests to process by finding eligible requests up to
     # the maximum single transfer size
     for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(req_limit):
-
         # Check to ensure both source and dest nodes are on the same host
         if req.node_from.host != node.host:
             log.error("Source file is not on this host [request_id=%i]." % req.id)
@@ -774,7 +769,6 @@ def _check_and_bundle_requests(requests, node, pull=False):
             di.ArchiveFileCopy.has_file == "Y",
         )
         if filecopy_dst.exists():
-
             log.info(
                 "Skipping request for %s/%s since it already exists on "
                 'this node ("%s"), and updating DB to reflect this.'
@@ -947,7 +941,6 @@ def update_node_hpss_outbound(node):
 
     # Construct final list of requests to process
     for req in requests_to_process:
-
         log.info("Pulling file %s/%s from HPSS" % (req.file.acq.name, req.file.name))
 
         # Mark any FileCopyRequest for this file as completed
@@ -961,7 +954,6 @@ def update_node_hpss_outbound(node):
 
 
 def _create_hpss_push_script(requests, node):
-
     start = """#!/bin/bash
 #SBATCH -t 4:00:00
 #SBATCH -p archivelong
@@ -1021,7 +1013,6 @@ fi
 
     # Loop over files to construct push script
     for req in requests:
-
         req_dict = {
             "file": req.file.name,
             "acq": req.file.acq.name,
@@ -1045,7 +1036,6 @@ fi
 
 
 def _create_hpss_pull_script(requests, node):
-
     start = """#!/bin/bash
 #SBATCH -t 4:00:00
 #SBATCH -p archivelong
@@ -1107,7 +1097,6 @@ fi
 
     # Loop over files to construct push script
     for req in requests:
-
         req_dict = {
             "file": req.file.name,
             "acq": req.file.acq.name,

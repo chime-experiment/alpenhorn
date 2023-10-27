@@ -45,7 +45,6 @@ obs_list = None
 
 
 def load_import_cache():
-
     global import_done
 
     # Is there a record of already-imported files? If so, we should use it to
