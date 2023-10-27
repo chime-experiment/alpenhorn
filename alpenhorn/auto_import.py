@@ -45,7 +45,6 @@ obs_list = None
 
 
 def load_import_cache():
-
     global import_done
 
     # Is there a record of already-imported files? If so, we should use it to
@@ -521,7 +520,7 @@ def _import_file(node, root, acq_name, file_name):
 
     # Make sure information about the acquisition exists in the DB.
     if atype == "corr" and ftype.name == "corr":
-        if not acq.corrinfos.count():
+        if di.CorrAcqInfo.get_or_none(acq=acq) is None:
             try:
                 di.CorrAcqInfo.create(
                     acq=acq, **get_acqcorrinfo_keywords_from_h5(fullpath)
@@ -537,7 +536,7 @@ def _import_file(node, root, acq_name, file_name):
                 )
                 di.CorrAcqInfo.create(acq=acq)
     elif atype == "hfb" and ftype.name == "hfb":
-        if not acq.hfbinfos.count():
+        if di.HFBAcqInfo.get_or_none(acq=acq) is None:
             try:
                 di.HFBAcqInfo.create(
                     acq=acq, **get_acqhfbinfo_keywords_from_h5(fullpath)
@@ -577,7 +576,7 @@ def _import_file(node, root, acq_name, file_name):
                     )
                     return
     elif atype == "rawadc":
-        if not acq.rawadcinfos.count():
+        if di.RawadcAcqInfo.get_or_none(acq=acq) is None:
             di.RawadcAcqInfo.create(
                 acq=acq, **get_acqrawadcinfo_keywords_from_h5(acq_name)
             )
@@ -626,7 +625,8 @@ def _import_file(node, root, acq_name, file_name):
     # Make sure information about the file exists in the DB.
     if ftype.name == "corr":
         # Add if (1) there is no corrinfo or (2) the corrinfo is missing.
-        if not file.corrinfos.count():
+        i = di.CorrFileInfo.get_or_none(file=file)
+        if i is None:
             try:
                 di.CorrFileInfo.create(
                     file=file, **get_filecorrinfo_keywords_from_h5(fullpath)
@@ -635,15 +635,14 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.corrinfos.count():
+                if di.CorrFileInfo.get_or_none(file=file) is None:
                     di.CorrFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s": HDF5 datasets '
                     "empty or unreadable. Leaving fields NULL." % (acq_name, file_name)
                 )
-        elif not file.corrinfos[0].start_time:
+        elif not i.start_time:
             try:
-                i = file.corrinfos[0]
                 k = get_filecorrinfo_keywords_from_h5(fullpath)
             except:
                 log.debug('Still missing info for file "%s/%s".')
@@ -658,7 +657,8 @@ def _import_file(node, root, acq_name, file_name):
                 )
     elif ftype.name == "hfb":
         # Add if (1) there is no corrinfo or (2) the corrinfo is missing.
-        if not file.hfbinfos.count():
+        i = di.HFBFileInfo.get_or_none(file=file)
+        if i is None:
             try:
                 di.HFBFileInfo.create(
                     file=file, **get_filehfbinfo_keywords_from_h5(fullpath)
@@ -667,15 +667,14 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.hfbinfos.count():
+                if di.HFBFileInfo.get_or_none(file=file) is None:
                     di.HFBFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s": HDF5 datasets '
                     "empty or unreadable. Leaving fields NULL." % (acq_name, file_name)
                 )
-        elif not file.hfbinfos[0].start_time:
+        elif not i.start_time:
             try:
-                i = file.hfbinfos[0]
                 k = get_filehfbinfo_keywords_from_h5(fullpath)
             except:
                 log.debug('Still missing info for file "%s/%s".')
@@ -690,7 +689,8 @@ def _import_file(node, root, acq_name, file_name):
                 )
     elif ftype.name == "hk":
         # Add if (1) there is no hkinfo or (2) the hkinfo is missing.
-        if not file.hkinfos.count():
+        i = di.HKFileInfo.get_or_none(file=file)
+        if i is None:
             try:
                 di.HKFileInfo.create(
                     file=file, **get_filehkinfo_keywords_from_h5(fullpath)
@@ -699,15 +699,14 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.corrinfos.count():
+                if di.HKFileInfo.get_or_none(file=file) is None:
                     di.HKFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s": HDF5 datasets '
                     "empty or unreadable. Leaving fields NULL." % (acq_name, file_name)
                 )
-        elif not file.hkinfos[0].start_time:
+        elif not i.start_time:
             try:
-                i = file.hkinfos[0]
                 k = get_filehkinfo_keywords_from_h5(fullpath)
             except:
                 log.debug('Still missing info for file "%s/%s".')
@@ -722,23 +721,16 @@ def _import_file(node, root, acq_name, file_name):
                 )
     elif ftype.name == "weather":
         # Add if (1) there is no weatherinfo or (2) the weatherinfo is missing.
-        if not file.weatherinfos.count():
-            #      try:
+        i = di.WeatherFileInfo.get_or_none(file=file)
+        if i is None:
             di.WeatherFileInfo.create(
                 file=file, **get_fileweatherinfo_keywords_from_h5(fullpath)
             )
             log.info(
                 'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
             )
-        #      except:
-        #        if not file.corrinfos.count():
-        #          di.WeatherFileInfo.create(file=file)
-        #        log.warning("Missing info for file \"%s/%s\": HDF5 datasets " \
-        #                    "empty or unreadable. Leaving fields NULL." %
-        #                    (acq_name, file_name))
-        elif not file.weatherinfos[0].start_time:
+        elif not i.start_time:
             try:
-                i = file.weatherinfos[0]
                 k = get_fileweatherinfo_keywords_from_h5(fullpath)
             except:
                 log.debug('Still missing info for file "%s/%s".')
@@ -753,7 +745,7 @@ def _import_file(node, root, acq_name, file_name):
 
     elif ftype.name == "rawadc":
         # Add if there is no rawadcinfo
-        if not file.rawadcinfos.count():
+        if di.RawadcFileInfo.get_or_none(file=file) is None:
             try:
                 di.RawadcFileInfo.create(
                     file=file, **get_filerawadcinfo_keywords_from_h5(fullpath)
@@ -762,7 +754,7 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.rawadcinfos.count():
+                if di.RawadcFileInfo.get_or_none(file=file) is None:
                     di.RawadcFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s". Leaving fields NULL.'
@@ -771,7 +763,7 @@ def _import_file(node, root, acq_name, file_name):
 
     elif ftype.name == "hkp":
         # Add if there is no hkpinfo
-        if not file.hkpinfos.count():
+        if di.HKPFileInfo.get_or_none(file=file) is None:
             try:
                 di.HKPFileInfo.create(
                     file=file, **get_filehkpinfo_keywords_from_h5(fullpath)
@@ -780,14 +772,14 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.hkpinfos.count():
+                if di.HKPFileInfo.get_or_none(file=file) is None:
                     di.HKPFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s". Leaving fields NULL.'
                     % (acq_name, file_name)
                 )
     elif atype == "digitalgain" and ftype.name == "calibration":
-        if not file.digitalgaininfos.count():
+        if di.DigitalGainFileInfo.get_or_none(file=file) is None:
             try:
                 di.DigitalGainFileInfo.create(
                     file=file, **get_filedigitalgaininfo_keywords_from_h5(fullpath)
@@ -796,14 +788,14 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.digitalgaininfos.count():
+                if di.DigitalGainFileInfo.get_or_none(file=file) is None:
                     di.DigitalGainFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s". Leaving fields NULL.'
                     % (acq_name, file_name)
                 )
     elif atype == "gain" and ftype.name == "calibration":
-        if not file.calibrationgaininfos.count():
+        if di.CalibrationGainFileInfo.get_or_none(file=file) is None:
             try:
                 di.CalibrationGainFileInfo.create(
                     file=file, **get_filecalibrationgaininfo_keywords_from_h5(fullpath)
@@ -812,14 +804,14 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.calibrationgaininfos.count():
+                if di.CalibrationGainFileInfo.get_or_none(file=file) is None:
                     di.CalibrationGainFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s". Leaving fields NULL.'
                     % (acq_name, file_name)
                 )
     elif atype == "flaginput" and ftype.name == "calibration":
-        if not file.flaginputinfos.count():
+        if di.FlagInputFileInfo.get_or_none(file=file) is None:
             try:
                 di.FlagInputFileInfo.create(
                     file=file, **get_fileflaginputinfo_keywords_from_h5(fullpath)
@@ -828,7 +820,7 @@ def _import_file(node, root, acq_name, file_name):
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
                 )
             except:
-                if not file.flaginputinfos.count():
+                if di.FlagInputFileInfo.get_or_none(file=file) is None:
                     di.FlagInputFileInfo.create(file=file)
                 log.warning(
                     'Missing info for file "%s/%s". Leaving fields NULL.'
@@ -837,7 +829,7 @@ def _import_file(node, root, acq_name, file_name):
 
     elif atype == "misc" and ftype.name == "miscellaneous":
         with db.proxy.atomic():
-            if not file.miscfileinfos.count():
+            if di.MiscFileInfo.get_or_none(file=file) is None:
                 di.MiscFileInfo.create(file=file, **get_miscfile_data(fullpath))
                 log.info(
                     'Added information for file "%s/%s" to DB.' % (acq_name, file_name)
