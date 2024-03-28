@@ -16,6 +16,9 @@ from ch_util import data_index as di
 from . import logger
 log = logger.get_log()
 
+# Set to True to debug subcommand invocation
+_DEBUG_SUBCOMMANDS = False
+
 # Parameters.
 max_time_per_node_operation = 300   # Don't let node operations hog time.
 min_loop_time = 60    # Main loop at most every 60 seconds.
@@ -54,9 +57,15 @@ def run_command(cmd, **kwargs):
 
     import subprocess
 
+    if _DEBUG_SUBCOMMANDS:
+        log.info("Executing: {0}...".format(cmd))
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
+
+    if _DEBUG_SUBCOMMANDS:
+        log.info("Subcommand returned {0}\nStdout:\n{1}\nStderr:\n{2}\n".format(retval,
+            stdout_val, stderr_val))
 
     return retval, stdout_val, stderr_val
 
@@ -331,19 +340,6 @@ def update_node_requests(node):
                                            req.node_from.name))
             continue
 
-        # Only proceed if the source file actually exists (and is not corrupted).
-        try:
-            di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
-                                   di.ArchiveFileCopy.node == req.node_from,
-                                   di.ArchiveFileCopy.has_file == 'Y')
-        except pw.DoesNotExist:
-            log.error("Skipping request for %s/%s since it is not available on "
-                      "node \"%s\". [file_id=%i]" % (req.file.acq.name,
-                                                     req.file.name,
-                                                     req.node_from.name,
-                                                     req.file.id))
-            continue
-
         # Only proceed if the destination file does not already exist.
         try:
             di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
@@ -359,6 +355,19 @@ def update_node_requests(node):
             continue
         except pw.DoesNotExist:
             pass
+
+        # Only proceed if the source file actually exists (and is not corrupted).
+        try:
+            di.ArchiveFileCopy.get(di.ArchiveFileCopy.file == req.file,
+                                   di.ArchiveFileCopy.node == req.node_from,
+                                   di.ArchiveFileCopy.has_file == 'Y')
+        except pw.DoesNotExist:
+            log.error("Skipping request for %s/%s since it is not available on "
+                      "node \"%s\". [file_id=%i]" % (req.file.acq.name,
+                                                     req.file.name,
+                                                     req.node_from.name,
+                                                     req.file.id))
+            continue
 
         # Check that there is enough space available.
         if node.avail_gb * 2 ** 30.0 < 2.0 * req.file.size_b:
@@ -392,7 +401,7 @@ def update_node_requests(node):
             # calculate the md5 hash as it goes, so we'll do that to save doing
             # it at the end.
             if command_available('bbcp'):
-                cmd = 'bbcp -f -z --port 4200 -W 4M -s 16 -o -E md5= %s %s' % (from_path, to_path)
+                cmd = 'bbcp -f -P 15 -z --port 4200 -W 4M -s 16 -o -E md5= %s %s' % (from_path, to_path)
                 ret, stdout, stderr = run_command(cmd.split())
 
                 # Attempt to parse STDERR for the md5 hash
@@ -572,35 +581,27 @@ def is_hpss_node(node):
     return (node.address == 'HPSS')
 
 
-def _check_and_bundle_requests(requests, node):
+def _check_and_bundle_requests(requests, node, pull=False):
     """Find eligible HPSS transfer requests, and return a bundle of them up to
     some maximum size."""
 
     # Size to bundle transfers into (in bytes)
     max_bundle_size = 800.0 * 2**30.0
 
+    # Max number of transfers.  For pushes we can be generous here, but for
+    # pulls, this has to be low, due to random-access overheads.
+    req_limit = 40 if pull else 500
+
     bundle_size = 0.0
     requests_to_process = []
 
     # Construct list of requests to process by finding eligible requests up to
     # the maximum single transfer size
-    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(500):
+    for req in requests.order_by(di.ArchiveFileCopyRequest.file_id).limit(req_limit):
 
         # Check to ensure both source and dest nodes are on the same host
         if req.node_from.host != node.host:
             log.error('Source file is not on this host [request_id=%i].' % req.id)
-            continue
-
-        # Check that there is actually a copy of the file at the source
-        filecopy_src = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
-                                                         di.ArchiveFileCopy.node == req.node_from,
-                                                         di.ArchiveFileCopy.has_file == 'Y')
-        if not filecopy_src.exists():
-            log.error("Skipping request for %s/%s since it is not available on "
-                      "node \"%s\". [file_id=%i]" % (req.file.acq.name,
-                                                     req.file.name,
-                                                     req.node_from.name,
-                                                     req.file.id))
             continue
 
         # Check if there is already a copy at the destination, and skip the request if there is
@@ -615,6 +616,18 @@ def _check_and_bundle_requests(requests, node):
             di.ArchiveFileCopyRequest.update(completed=True).where(
                 di.ArchiveFileCopyRequest.file == req.file,
                 di.ArchiveFileCopyRequest.group_to == node.group).execute()
+            continue
+
+        # Check that there is actually a copy of the file at the source
+        filecopy_src = di.ArchiveFileCopy.select().where(di.ArchiveFileCopy.file == req.file,
+                                                         di.ArchiveFileCopy.node == req.node_from,
+                                                         di.ArchiveFileCopy.has_file == 'Y')
+        if not filecopy_src.exists():
+            log.error("Skipping request for %s/%s since it is not available on "
+                      "node \"%s\". [file_id=%i]" % (req.file.acq.name,
+                                                     req.file.name,
+                                                     req.node_from.name,
+                                                     req.file.id))
             continue
 
         # Ensure that we only attempt to transfer into HPSS online from an HPSS offline node
@@ -657,6 +670,9 @@ def run_hpss_callbacks_from_file():
 
         # Execute the callback, if decomposition worked
         if match:
+            if _DEBUG_SUBCOMMANDS:
+                log.info("Executing: alpenhorn_hpss {0} {1} {2}".format(
+                    match.group(1), match.group(2), match.group(3)))
             os.system("alpenhorn_hpss {0} {1} {2}".format(match.group(1),
                 match.group(2), match.group(3)))
         else:
@@ -687,14 +703,15 @@ def update_node_hpss_inbound(node):
     )
 
     # Get the requests we should actually process
-    requests_to_process = _check_and_bundle_requests(requests, node)
+    requests_to_process = _check_and_bundle_requests(requests, node, False)
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
         return
 
-    if len(queued_archive_jobs()) > 1:
-        log.info('Skipping HPSS inbound as queue full.')
+    n_jobs = len(queued_archive_jobs())
+    if n_jobs > 0:
+        log.info('Skipping HPSS inbound as queue full. ({0})'.format(n_jobs))
         return
 
     # Construct final list of requests to process
@@ -737,14 +754,15 @@ def update_node_hpss_outbound(node):
     requests = requests.join(di.StorageNode).where(di.StorageNode.address == 'HPSS')
 
     # Get the requests we should actually process
-    requests_to_process = _check_and_bundle_requests(requests, node)
+    requests_to_process = _check_and_bundle_requests(requests, node, True)
 
     # Exit if there are no requests to process
     if len(requests_to_process) == 0:
         return
 
-    if len(queued_archive_jobs()) > 1:
-        log.info('Skipping HPSS outbound as queue full.')
+    n_jobs = len(queued_archive_jobs())
+    if n_jobs > 0:
+        log.info('Skipping HPSS outbound as queue full. ({0})'.format(n_jobs))
         return
 
     # Construct final list of requests to process

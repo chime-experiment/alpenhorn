@@ -14,6 +14,7 @@ log = logger.get_log()
 
 # Reconnect to the database read/write
 di.connect_database(read_write=True)
+#log.info('Successful db connect')
 
 
 @click.group()
