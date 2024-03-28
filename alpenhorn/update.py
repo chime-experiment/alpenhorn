@@ -1,5 +1,6 @@
 """Routines for updating the state of a node.
 """
+
 # === Start Python 2/3 compatibility
 from __future__ import absolute_import, division, print_function, unicode_literals
 from future.builtins import *  # noqa  pylint: disable=W0401, W0614
@@ -84,8 +85,11 @@ def run_command(cmd, **kwargs):
     retval = proc.returncode
 
     if _DEBUG_SUBCOMMANDS:
-        log.info("Subcommand returned {0}\nStdout:\n{1}\nStderr:\n{2}\n".format(retval,
-            stdout_val, stderr_val))
+        log.info(
+            "Subcommand returned {0}\nStdout:\n{1}\nStderr:\n{2}\n".format(
+                retval, stdout_val, stderr_val
+            )
+        )
 
     return (
         retval,
@@ -857,8 +861,11 @@ def run_hpss_callbacks_from_file():
         # Execute the callback, if decomposition worked
         if match:
             if _DEBUG_SUBCOMMANDS:
-                log.info("Executing: alpenhorn_hpss {0} {1} {2}".format(
-                    match.group(1), match.group(2), match.group(3)))
+                log.info(
+                    "Executing: alpenhorn_hpss {0} {1} {2}".format(
+                        match.group(1), match.group(2), match.group(3)
+                    )
+                )
             os.system(
                 "alpenhorn_hpss {0} {1} {2}".format(
                     match.group(1), match.group(2), match.group(3)
