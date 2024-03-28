@@ -25,6 +25,9 @@ from . import logger
 
 log = logger.get_log()
 
+# Set to True to debug subcommand invocation
+_DEBUG_SUBCOMMANDS = False
+
 # Parameters.
 max_time_per_node_operation = 300  # Don't let node operations hog time.
 min_loop_time = 60  # Main loop at most every 60 seconds.
@@ -72,11 +75,17 @@ def run_command(cmd, **kwargs):
 
     import subprocess
 
+    if _DEBUG_SUBCOMMANDS:
+        log.info("Executing: {0}...".format(cmd))
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs
     )
     stdout_val, stderr_val = proc.communicate()
     retval = proc.returncode
+
+    if _DEBUG_SUBCOMMANDS:
+        log.info("Subcommand returned {0}\nStdout:\n{1}\nStderr:\n{2}\n".format(retval,
+            stdout_val, stderr_val))
 
     return (
         retval,
@@ -488,6 +497,7 @@ def update_node_requests(node):
                         "bbcp",
                         "-V",
                         "-f",
+                        "-P 15",
                         "-z",
                         "--port",
                         "4200",
@@ -846,6 +856,9 @@ def run_hpss_callbacks_from_file():
 
         # Execute the callback, if decomposition worked
         if match:
+            if _DEBUG_SUBCOMMANDS:
+                log.info("Executing: alpenhorn_hpss {0} {1} {2}".format(
+                    match.group(1), match.group(2), match.group(3)))
             os.system(
                 "alpenhorn_hpss {0} {1} {2}".format(
                     match.group(1), match.group(2), match.group(3)
