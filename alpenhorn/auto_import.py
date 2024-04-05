@@ -12,7 +12,6 @@ import os
 import datetime
 
 import bisect
-import bitshuffle.h5
 import calendar
 import configobj
 
