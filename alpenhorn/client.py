@@ -24,7 +24,12 @@ import chimedb.core as db
 import chimedb.data_index as di
 
 
-@click.group()
+def normalize(name):
+    return name.replace("_", "-")
+
+
+# Pass token_normalize_func to context to allow commands with underscores
+@click.group(context_settings={"token_normalize_func": normalize})
 def cli():
     """Client interface for alpenhorn. Use to request transfers, mount drives,
     check status etc."""
