@@ -125,7 +125,7 @@ def slurm_jobs():
 
     user = getpass.getuser()
 
-    ret, out, err = run_command(["squeue", "-o", "%%all", "-u", user])
+    ret, out, err = run_command(["squeue", "-o", "%all", "-u", user])
     lines = out.split("\n")
     headers = lines[0].split("|")
 
