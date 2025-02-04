@@ -20,6 +20,7 @@
 
 THIS_SCRIPT=$(basename $0)
 SCREEN=/usr/bin/screen
+AWK=/usr/bin/awk
 
 # NB: The inbound command ends up in $SSH_ORIGINAL_COMMAND
 
@@ -49,10 +50,20 @@ if [ "$SSH_ORIGINAL_COMMAND" = "stop" \
   ]
 then
   echo "$0: Killing alpenhornd (if running)"
+
+  # Kill all screens with sessions named "alpenhornd"
+  run_screen -ls | $AWK '/[0-9]*.alpenhornd/ { print $1 }' | while read session; do
+    run_screen -S $session -X quit
+  done
+  sleep 1
+
+  # Kill all processes named "alpenhornd"
+  killall -v -9 alpenhornd
+
+  # If force-restarting, wait for termination
   run_screen -S alpenhornd -X quit
   if [ "$SSH_ORIGINAL_COMMAND" = "restart" ]
   then
-    # if force-restarting, wait for termination
     sleep 5
   fi
 fi
