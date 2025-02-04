@@ -1,4 +1,5 @@
 """Alpenhorn client interface."""
+
 # === Start Python 2/3 compatibility
 from __future__ import absolute_import, division, print_function
 from future.builtins import *  # noqa  pylint: disable=W0401, W0614
@@ -23,7 +24,12 @@ import chimedb.core as db
 import chimedb.data_index as di
 
 
-@click.group()
+def normalize(name):
+    return name.replace("_", "-")
+
+
+# Pass token_normalize_func to context to allow commands with underscores
+@click.group(context_settings={"token_normalize_func": normalize})
 def cli():
     """Client interface for alpenhorn. Use to request transfers, mount drives,
     check status etc."""
@@ -103,7 +109,6 @@ def sync(
     # If the target option has been specified, only copy nodes also not
     # available there...
     if target is not None:
-
         # Fetch a reference to the target group
         try:
             target_group = di.StorageGroup.get(name=target)
@@ -158,7 +163,6 @@ def sync(
 
     # If requested, limit query to a specific acquisition...
     if acq is not None:
-
         # Fetch acq if specified
         try:
             acq = di.ArchiveAcq.get(name=acq)
@@ -202,7 +206,6 @@ def sync(
 
     # Perform update in a transaction to avoid any clobbering from concurrent updates
     with di.ArchiveFileCopyRequest._meta.database.atomic():
-
         # Get a list of all the file ids for the copies we should perform
         files_ids = [c.file_id for c in copy]
 
@@ -241,7 +244,6 @@ def sync(
 
         # Insert any new requests
         if len(files_out) > 0:
-
             # Construct a list of all the rows to insert
             insert = [
                 {
@@ -367,7 +369,6 @@ def verify(node_name, md5, fixdb, acq):
 
     with click.progressbar(lfiles, label="Scanning files") as lfiles_iter:
         for filename, acqname, filesize, md5sum, fc_id in lfiles_iter:
-
             # Skip if not in specified acquisitions
             if len(acq) > 0 and acqname not in acq:
                 continue
@@ -415,7 +416,6 @@ def verify(node_name, md5, fixdb, acq):
     # Fix up the database by marking files as missing, and marking
     # corrupt files for verification by alpenhornd.
     if fixdb:
-
         # Make sure we connect RW
         db.connect(read_write=True)
 
@@ -539,7 +539,6 @@ def clean(node_name, days, size, force, now, target, acq):
 
     # If the target option has been specified, only clean files also available there...
     if target is not None:
-
         # Fetch a reference to the target group
         try:
             target_group = di.StorageGroup.get(name=target)
@@ -580,7 +579,6 @@ def clean(node_name, days, size, force, now, target, acq):
 
         # Iterate over file types for cleaning
         for name, infotable in filetypes:
-
             # Filter to fetch only ones with a start time older than `oldest`
             oldfiles = files.join(infotable).where(infotable.start_time < oldest_unix)
 
@@ -608,7 +606,6 @@ def clean(node_name, days, size, force, now, target, acq):
 
     # If size is set, iterate through files until we've satisfied the size given
     elif size is not None:
-
         # Convert to bytes
         size *= 2**30
 
@@ -644,7 +641,6 @@ def clean(node_name, days, size, force, now, target, acq):
     # If neither days nor size is not set, then just select all files that
     # meet the requirements so far
     else:
-
         file_ids = list(files)
         count = files.count()
 
@@ -1033,9 +1029,7 @@ def import_files(node_name, verbose, acq, dry):
         return
 
     with click.progressbar(acqs, label="Scanning acquisitions") as acq_iter:
-
         for acq_name in acq_iter:
-
             try:
                 di.util.parse_acq_name(acq_name)
             except db.ValidationError:
@@ -1106,7 +1100,6 @@ def import_files(node_name, verbose, acq, dry):
             print(fn)
 
     if verbose > 1:
-
         print("Corrupt:")
         for fn in corrupt_files:
             print(fn)

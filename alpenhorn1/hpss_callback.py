@@ -1,5 +1,6 @@
 """Call backs for the HPSS interface.
 """
+
 # === Start Python 2/3 compatibility
 from __future__ import absolute_import, division, print_function, unicode_literals
 from future.builtins import *  # noqa  pylint: disable=W0401, W0614
@@ -25,7 +26,12 @@ log = logger.get_log()
 db.connect(read_write=True)
 
 
-@click.group()
+def normalize(name):
+    return name.replace("_", "-")
+
+
+# Pass token_normalize_func to context to allow commands with underscores
+@click.group(context_settings={"token_normalize_func": normalize})
 def cli():
     """Call back commands for updating the database from a shell script after an
     HPSS transfer."""
@@ -82,7 +88,6 @@ def push_success(file_id, node_id):
 
     # Update the FileCopy (if exists), or insert a new FileCopy
     try:
-
         fcopy = (
             di.ArchiveFileCopy.select()
             .where(di.ArchiveFileCopy.file == afile, di.ArchiveFileCopy.node == node)
@@ -117,7 +122,6 @@ def pull_success(file_id, node_id):
 
     # Update the FileCopy (if exists), or insert a new FileCopy
     try:
-
         fcopy = (
             di.ArchiveFileCopy.select()
             .where(di.ArchiveFileCopy.file == afile, di.ArchiveFileCopy.node == node)
